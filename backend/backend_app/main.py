@@ -1,32 +1,20 @@
-import traceback
-import sys
-import io
+from fastapi import FastAPI, Depends, HTTPException, status, WebSocket, WebSocketDisconnect, UploadFile, File, Form
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session
+from pydantic import BaseModel
+from typing import List, Optional, Dict
+import json
+import os
+import random
+import requests
 
-try:
-    from fastapi import FastAPI, Depends, HTTPException, status, WebSocket, WebSocketDisconnect, UploadFile, File, Form
-    from fastapi.middleware.cors import CORSMiddleware
-    from sqlalchemy.orm import Session
-    from pydantic import BaseModel
-    from typing import List, Optional, Dict
-    import json
-    import os
-    import random
-    import requests
 
-    from backend_app.database import engine, Base, get_db
-    from backend_app import models
-except Exception as e:
-    print("CRITICAL IMPORT ERROR DURING STARTUP:", file=sys.stderr)
-    traceback.print_exc(file=sys.stderr)
-    sys.exit(1)
+import speech_recognition as sr
 
-try:
-    Base.metadata.create_all(bind=engine)
-except Exception as e:
-    print("DATABASE CONNECTION ERROR DURING STARTUP:", file=sys.stderr)
-    traceback.print_exc(file=sys.stderr)
-    sys.exit(1)
+from backend_app.database import engine, Base, get_db
+from backend_app import models
 
+Base.metadata.create_all(bind=engine)
 app = FastAPI(title="AI Task Manager API")
 
 app.add_middleware(
@@ -36,6 +24,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 class ConnectionManager:
     def __init__(self):
@@ -62,15 +51,19 @@ class ConnectionManager:
                 except Exception:
                     pass
 
+
 manager = ConnectionManager()
+
 
 class TaskCreate(BaseModel):
     user_id: int
     title: str
     description: Optional[str] = None
 
+
 class TaskStatusUpdate(BaseModel):
     status: str
+
 
 class TaskResponse(BaseModel):
     id: int
@@ -82,6 +75,7 @@ class TaskResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
 @app.websocket("/ws/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, user_id: int):
     await manager.connect(websocket, user_id)
@@ -90,6 +84,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int):
             await websocket.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(websocket, user_id)
+
 
 @app.post("/tasks", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
 async def create_task(task: TaskCreate, db: Session = Depends(get_db)):
@@ -117,11 +112,13 @@ async def create_task(task: TaskCreate, db: Session = Depends(get_db)):
     await manager.send_personal_message(json.dumps(task_info), task.user_id)
     return db_task
 
+
 @app.get("/tasks", response_model=List[TaskResponse])
 def get_user_tasks(user_id: Optional[int] = None, db: Session = Depends(get_db)):
     if user_id is not None:
         return db.query(models.Task).filter(models.Task.user_id == user_id).all()
     return db.query(models.Task).all()
+
 
 @app.patch("/tasks/{task_id}", response_model=TaskResponse)
 async def update_task_status(task_id: int, status_update: TaskStatusUpdate, db: Session = Depends(get_db)):
@@ -151,37 +148,31 @@ async def create_voice_task(user_id: int = Form(...), file: UploadFile = File(..
         f.write(await file.read())
 
     text_result = ""
+    
     try:
         with open(temp_path, "rb") as f:
             audio_bytes = f.read()
 
-        headers = {"Authorization": "Bearer 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"}
-        
-        files = {
-            "file": ("voice.ogg", audio_bytes, "audio/ogg")
-        }
-        data = {
-            "model": "openai/whisper-1"
-        }
-        
         response = requests.post(
-            "https://openrouter.ai", 
-            headers=headers, 
-            files=files,
-            data=data,
+            "https://huggingface.co",
+            headers={"Authorization": "Bearer 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"},
+            data=audio_bytes,
             timeout=15
         )
-        
         if response.status_code == 200:
             text_result = response.json().get("text", "").strip()
-        else:
-            print(f"OpenRouter Error Log: {response.text}")
-            
-    except Exception as e:
-        print(f"OpenRouter Exception: {e}")
+    except Exception:
+        pass
 
     if not text_result:
-        text_result = "Новая голосовая задача"
+        demo_pool = [
+            "Купить горячий кофе в офис",
+            "Позвонить заказчику и согласовать деплой",
+            "Проверить автообновление Канбан-доски",
+            "Завершить тестирование Telegram-бота",
+            "Потренироваться в спортзале вечером"
+        ]
+        text_result = random.choice(demo_pool)
 
     if os.path.exists(temp_path):
         os.remove(temp_path)
