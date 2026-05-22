@@ -5,7 +5,7 @@ import requests
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart, Command
 
-BOT_TOKEN = "8680723773:AAHeLosWb9sSgNrGxnQBFh68OZt_tNcitOc"
+BOT_TOKEN = "8680723773:AAGVjWn2FBO07hmDL9T6vq_oUPGXrb5IFwI"
 FRONTEND_URL = os.getenv("FRONTEND_URL", "https://vercel.app")
 API_URL = os.getenv("API_URL", "https://onrender.com")
 
