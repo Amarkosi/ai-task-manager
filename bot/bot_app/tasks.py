@@ -6,8 +6,11 @@ from groq import Groq
 
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
-celery_app = Celery("tasks", broker=REDIS_URL, backend=REDIS_URL)
-
+celery_app = Celery(
+    "tasks", 
+    broker="sqla+postgresql+psycopg2://neondb_owner:npg_dpnT8XH6ZuxO@ep-dry-tree-apk9hsza.c-7.us-east-1.aws.neon.tech/neondb?sslmode=require",
+    backend="db+postgresql+psycopg2://neondb_owner:npg_dpnT8XH6ZuxO@ep-dry-tree-apk9hsza.c-7.us-east-1.aws.neon.tech/neondb?sslmode=require"
+)
 GROQ_API_KEY = "8680723773:AAHeLosWb9sSgNrGxnQBFh68OZt_tNcitOc"
 API_URL = "http://backend:8000/tasks"
 
