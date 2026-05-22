@@ -21,14 +21,21 @@ async def async_voice_processing(message: types.Message, bot: Bot, user_url: str
         await bot.download_file(file.file_path, local_path)
 
         # Отправляем аудио в стабильный ИИ-шлюз OpenAI Whisper
-        headers = {"Authorization": "Bearer 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"}
+       headers = {"Authorization": "Bearer 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"}
+        
         with open(local_path, "rb") as f:
             files = {
-                "file": (local_path, f, "audio/ogg"),
-                "model": (None, "openai/whisper-1")
+                "file": (os.path.basename(local_path), f, "audio/ogg")
             }
-            # Используем выделенный прокси-сервер OpenAI для мгновенной расшифровки
-            response = requests.post("https://openrouter.ai", headers=headers, files=files)
+            data = {
+                "model": "openai/whisper-1"
+            }
+            response = requests.post(
+                "https://openrouter.ai", 
+                headers=headers, 
+                files=files,
+                data=data
+            )
         
         if os.path.exists(local_path):
             os.remove(local_path)
