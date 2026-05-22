@@ -30,7 +30,7 @@ async def async_voice_processing(message: types.Message, bot: Bot, user_url: str
 
         # Превращаем байты в виртуальный ogg-файл для корректного multipart запроса в Groq
         audio_packet = io.BytesIO(audio_bytes)
-        audio_packet.name = "voice.ogg"
+        audio_packet.name = "voice.wav"
 
         text_result = ""
         
