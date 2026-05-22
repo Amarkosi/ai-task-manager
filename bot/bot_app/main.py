@@ -49,7 +49,10 @@ async def async_voice_processing(message: types.Message, bot: Bot, user_url: str
 async def cmd_start(message: types.Message):
     await message.answer(
         f"Привет, {message.from_user.first_name}! 🚀\n\n"
-        "Пожалуйста, введите или нажмите команду /board, чтобы получить ссылку на вашу личную Канбан-доску."
+        "Я ваш Omni-Channel ассистент. Чтобы создать задачу, вы можете:\n"
+        "1. Написать её текстом в этот чат.\n"
+        "2. Нажать значок микрофона 🎙 на клавиатуре вашего телефона и надиктовать её голосом (она автоматически переведется в текст)!\n\n"
+        "Посмотреть вашу Канбан-доску можно по команде /board"
     )
 
 @dp.message(Command("board"))
