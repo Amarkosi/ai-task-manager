@@ -6,6 +6,7 @@ from typing import List, Optional, Dict
 import json
 import os
 import random
+import requests
 
 from backend_app.database import engine, Base, get_db
 from backend_app import models
@@ -143,7 +144,6 @@ async def create_voice_task(user_id: int = Form(...), file: UploadFile = File(..
     with open(temp_path, "wb") as f:
         f.write(await file.read())
 
-    # Стабильная текстовая расшифровка через ИИ шлюз без внешних библиотек
     text_result = ""
     try:
         with open(temp_path, "rb") as f:
@@ -161,7 +161,7 @@ async def create_voice_task(user_id: int = Form(...), file: UploadFile = File(..
         pass
 
     if not text_result:
-        demo_pool = ["Купить горячий кофе", "Сдать проект тимлиду", "Проверить автообновление доски", "Отдохнуть после деплоя"]
+        demo_pool = ["Купить горячий coffee", "Сдать проект тимлиду", "Проверить автообновление доски", "Отдохнуть после деплоя"]
         text_result = random.choice(demo_pool)
 
     if os.path.exists(temp_path):
