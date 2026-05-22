@@ -135,13 +135,16 @@ async def create_voice_task(user_id: int = Form(...), file: UploadFile = File(..
 
     text_result = ""
     try:
-        # Прямой HTTP запрос к Whisper API через рабочий токен Groq Cloud без использования сторонних прокси
         with open(temp_path, "rb") as f:
+            # Четко указываем имя "audio.ogg" и MIME-тип, чтобы Groq распознал кодек
+            files = {"file": ("audio.ogg", f, "audio/ogg")}
+            data = {"model": "whisper-large-v3"}
+            
             response = requests.post(
                 "https://groq.com",
                 headers={"Authorization": "Bearer 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"},
-                files={"file": (temp_path, f, "audio/ogg")},
-                data={"model": "whisper-large-v3"},
+                files=files,
+                data=data,
                 timeout=25
             )
         if response.status_code == 200:
@@ -150,7 +153,7 @@ async def create_voice_task(user_id: int = Form(...), file: UploadFile = File(..
         pass
 
     if not text_result:
-        text_result = "Ошибка распознавания аудио"
+        text_result = "Не удалось распознать речь"
 
     if os.path.exists(temp_path):
         os.remove(temp_path)
