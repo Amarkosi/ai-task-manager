@@ -6,6 +6,7 @@ from typing import List, Optional, Dict
 import json
 import os
 import requests
+import speech_recognition as sr
 
 from backend_app.database import engine, Base, get_db
 from backend_app import models
@@ -130,32 +131,21 @@ async def update_task_status(task_id: int, status_update: TaskStatusUpdate, db: 
 @app.post("/tasks/voice", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
 async def create_voice_task(user_id: int = Form(...), file: UploadFile = File(...), db: Session = Depends(get_db)):
     temp_path = f"temp_{file.filename}"
-    if not temp_path.endswith(".ogg"):
-        temp_path += ".ogg"
-        
     with open(temp_path, "wb") as f:
         f.write(await file.read())
 
     text_result = ""
+    
     try:
-        headers = {"Authorization": "Bearer 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"}
-        with open(temp_path, "rb") as f:
-            files = {"file": ("voice.ogg", f, "audio/ogg")}
-            data = {"model": "openai/whisper-1"}
-            response = requests.post(
-                "https://openrouter.ai",
-                headers=headers,
-                files=files,
-                data=data,
-                timeout=20
-            )
-        if response.status_code == 200:
-            text_result = response.json().get("text", "").strip()
+        r = sr.Recognizer()
+        with sr.AudioFile(temp_path) as source:
+            audio_data = r.record(source)
+            text_result = r.recognize_google(audio_data, language="ru-RU").strip()
     except Exception:
         pass
 
     if not text_result:
-        text_result = "Новая голосовая задача"
+        text_result = "Голосовая задача принята"
 
     if os.path.exists(temp_path):
         os.remove(temp_path)
