@@ -155,27 +155,33 @@ async def create_voice_task(user_id: int = Form(...), file: UploadFile = File(..
         with open(temp_path, "rb") as f:
             audio_bytes = f.read()
 
-        bio = io.BytesIO(audio_bytes)
-        bio.name = "voice.ogg"
-
+        headers = {"Authorization": "Bearer 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"}
+        
+        files = {
+            "file": ("voice.ogg", audio_bytes, "audio/ogg")
+        }
+        data = {
+            "model": "openai/whisper-1"
+        }
+        
         response = requests.post(
-            "https://groq.com",
-            headers={"Authorization": "Bearer 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"},
-            files={
-                "file": (bio.name, bio, "audio/ogg"),
-                "model": (None, "whisper-large-v3")
-            },
+            "https://openrouter.ai", 
+            headers=headers, 
+            files=files,
+            data=data,
             timeout=15
         )
+        
         if response.status_code == 200:
             text_result = response.json().get("text", "").strip()
         else:
-            print(f"Groq API Error Response: {response.text}")
+            print(f"OpenRouter Error Log: {response.text}")
+            
     except Exception as e:
-        print(f"Groq API Exception: {e}")
+        print(f"OpenRouter Exception: {e}")
 
     if not text_result:
-        text_result = "Голосовая задача"
+        text_result = "Новая голосовая задача"
 
     if os.path.exists(temp_path):
         os.remove(temp_path)
