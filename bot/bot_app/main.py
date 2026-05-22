@@ -5,7 +5,6 @@ import requests
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart, Command
 
-# Токены и адреса
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8680723773:AAHeLosWb9sSgNrGxnQBFh68OZt_tNcitOc")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "https://vercel.app")
 API_URL = os.getenv("API_URL", "https://onrender.com")
@@ -14,28 +13,22 @@ logging.basicConfig(level=logging.INFO)
 dp = Dispatcher()
 
 async def async_voice_processing(message: types.Message, bot: Bot, user_url: str):
+    status_msg = await message.answer("🔄 ИИ расшифровывает ваше аудио, пожалуйста, подождите...")
     try:
         voice_file_id = message.voice.file_id
         file = await bot.get_file(voice_file_id)
         local_path = f"{voice_file_id}.ogg"
         await bot.download_file(file.file_path, local_path)
 
-        # Отправляем аудио в стабильный ИИ-шлюз OpenAI Whisper
-       headers = {"Authorization": "Bearer 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"}
-        
+        # Отправляем аудио в стабильный и бесплатный ИИ-шлюз Hugging Face Whisper
         with open(local_path, "rb") as f:
-            files = {
-                "file": (os.path.basename(local_path), f, "audio/ogg")
-            }
-            data = {
-                "model": "openai/whisper-1"
-            }
-            response = requests.post(
-                "https://openrouter.ai", 
-                headers=headers, 
-                files=files,
-                data=data
-            )
+            audio_data = f.read()
+
+        response = requests.post(
+            "https://huggingface.co",
+            headers={"Authorization": "Bearer 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"},
+            data=audio_data
+        )
         
         if os.path.exists(local_path):
             os.remove(local_path)
@@ -44,10 +37,10 @@ async def async_voice_processing(message: types.Message, bot: Bot, user_url: str
             text_result = response.json().get("text", "").strip()
             
             if not text_result:
-                await message.answer("❌ ИИ не смог расслышать речь в этом аудио. Попробуйте надиктовать четче.")
+                await status_msg.edit_text("❌ ИИ не смог расслышать речь в этом аудио. Попробуйте надиктовать громче и четче.")
                 return
 
-            # Записываем настоящие слова в PostgreSQL базу Neon
+            # Записываем РЕАЛЬНЫЙ текст в базу данных Neon через FastAPI
             task_data = {
                 "user_id": message.from_user.id,
                 "title": text_result,
@@ -56,20 +49,19 @@ async def async_voice_processing(message: types.Message, bot: Bot, user_url: str
             api_resp = requests.post(API_URL, json=task_data)
             
             if api_resp.status_code == 201:
-                await message.answer(
+                await status_msg.edit_text(
                     f"✅ Голосовая задача успешно создана!\n\n"
                     f"Текст задачи: \"{text_result}\"\n\n"
                     f"Результат уже на доске:\n{user_url}"
                 )
             else:
-                await message.answer(f"❌ Текст распознан: \"{text_result}\", но бэкенд вернул ошибку {api_resp.status_code}")
+                await status_msg.edit_text(f"❌ Текст распознан: \"{text_result}\", но бэкенд вернул ошибку {api_resp.status_code}")
         else:
-            logging.error(f"ИИ Error: {response.text}")
-            await message.answer("❌ Временная задержка на стороне ИИ-декодера OpenAI. Попробуйте еще раз.")
+            await status_msg.edit_text("❌ Временная задержка на стороне ИИ-декодера. Пожалуйста, повторите фразу еще раз.")
             
     except Exception as e:
         logging.error(f"Ошибка фоновой обработки аудио: {e}")
-        await message.answer("❌ Произошла ошибка при обработке голосового сообщения.")
+        await status_msg.edit_text("❌ Произошла ошибка при обработке голосового сообщения.")
 
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
@@ -86,10 +78,6 @@ async def cmd_board(message: types.Message):
 @dp.message(lambda message: message.voice)
 async def handle_voice_task(message: types.Message, bot: Bot):
     user_url = f"{FRONTEND_URL}/?user_id={message.from_user.id}"
-    await message.answer(
-        "📥 Ваше аудио принято в очередь! ИИ обрабатывает его в фоне.\n\n"
-        f"Следите за обновлениями на доске:\n{user_url}"
-    )
     asyncio.create_task(async_voice_processing(message, bot, user_url))
 
 @dp.message(lambda message: message.text)
