@@ -13,53 +13,36 @@ logging.basicConfig(level=logging.INFO)
 dp = Dispatcher()
 
 async def async_voice_processing(message: types.Message, bot: Bot, user_url: str):
-    status_msg = await message.answer("🔄 ИИ расшифровывает ваше аудио, пожалуйста, подождите...")
+    status_msg = await message.answer("🔄 Обработка аудио на сервере, пожалуйста, подождите...")
     try:
         voice_file_id = message.voice.file_id
         file = await bot.get_file(voice_file_id)
         local_path = f"{voice_file_id}.ogg"
         await bot.download_file(file.file_path, local_path)
-
-        # Отправляем аудио в стабильный и бесплатный ИИ-шлюз Hugging Face Whisper
+        
+        voice_api_url = API_URL.replace("/tasks", "/tasks/voice") if API_URL.endswith("/tasks") else f"{API_URL}/voice"
+        
         with open(local_path, "rb") as f:
-            audio_data = f.read()
-
-        response = requests.post(
-            "https://huggingface.co",
-            headers={"Authorization": "Bearer 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"},
-            data=audio_data
-        )
+            files = {"file": (local_path, f, "audio/ogg")}
+            data = {"user_id": str(message.from_user.id)}
+            response = requests.post(voice_api_url, files=files, data=data)
         
         if os.path.exists(local_path):
             os.remove(local_path)
 
-        if response.status_code == 200:
-            text_result = response.json().get("text", "").strip()
-            
-            if not text_result:
-                await status_msg.edit_text("❌ ИИ не смог расслышать речь в этом аудио. Попробуйте надиктовать громче и четче.")
-                return
-
-            task_data = {
-                "user_id": message.from_user.id,
-                "title": text_result,
-                "description": "Создано голосом через Telegram"
-            }
-            api_resp = requests.post(API_URL, json=task_data)
-            
-            if api_resp.status_code == 201:
-                await status_msg.edit_text(
-                    f"✅ Голосовая задача успешно создана!\n\n"
-                    f"Текст задачи: \"{text_result}\"\n\n"
-                    f"Результат уже на доске:\n{user_url}"
-                )
-            else:
-                await status_msg.edit_text(f"❌ Текст распознан: \"{text_result}\", но бэкенд вернул ошибку {api_resp.status_code}")
+        if response.status_code == 201:
+            text_result = response.json().get("title", "").strip()
+            await status_msg.edit_text(
+                f"✅ Голосовая задача успешно создана!\n\n"
+                f"Текст задачи: \"{text_result}\"\n\n"
+                f"Результат уже на доске Vercel:\n{user_url}"
+            )
         else:
-            await status_msg.edit_text("❌ Временная задержка на стороне ИИ-декодера. Пожалуйста, повторите фразу еще раз.")
+            logging.error(f"Backend voice error: {response.text}")
+            await status_msg.edit_text("❌ Бэкенд не смог распознать аудио. Попробуйте надиктовать четче.")
             
     except Exception as e:
-        logging.error(f"Ошибка фоновой обработки аудио: {e}")
+        logging.error(f"Ошибка обработки аудио: {e}")
         await status_msg.edit_text("❌ Произошла ошибка при обработке голосового сообщения.")
 
 @dp.message(CommandStart())
