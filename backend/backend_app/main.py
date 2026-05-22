@@ -6,6 +6,7 @@ from typing import List, Optional, Dict
 import json
 import os
 import requests
+import io
 
 from backend_app.database import engine, Base, get_db
 from backend_app import models
@@ -136,25 +137,27 @@ async def create_voice_task(user_id: int = Form(...), file: UploadFile = File(..
     text_result = ""
     try:
         with open(temp_path, "rb") as f:
-            # Отправка напрямую в шлюз OpenRouter OpenAI Whisper, который сам декодирует файлы
-            headers = {"Authorization": "Bearer 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"}
-            files = {"file": ("audio.ogg", f, "audio/ogg")}
-            data = {"model": "openai/whisper-1"}
-            
-            response = requests.post(
-                "https://openrouter.ai",
-                headers=headers,
-                files=files,
-                data=data,
-                timeout=25
-            )
+            audio_bytes = f.read()
+
+        # Превращаем байты в виртуальный ogg-файл для распознавания в OpenAI Whisper модели
+        audio_packet = io.BytesIO(audio_bytes)
+        audio_packet.name = "voice.ogg"
+
+        # Бесплатный и моментальный шлюз Groq Cloud OpenAI Whisper API
+        response = requests.post(
+            "https://groq.com",
+            headers={"Authorization": "Bearer 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"},
+            files={"file": (audio_packet.name, audio_packet, "audio/ogg")},
+            data={"model": "whisper-large-v3"},
+            timeout=25
+        )
         if response.status_code == 200:
             text_result = response.json().get("text", "").strip()
     except Exception:
         pass
 
     if not text_result:
-        text_result = "Не удалось распознать речь"
+        text_result = "Не удалось распознать речь ИИ"
 
     if os.path.exists(temp_path):
         os.remove(temp_path)
