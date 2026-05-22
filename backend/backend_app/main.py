@@ -135,26 +135,28 @@ async def create_voice_task(user_id: int = Form(...), file: UploadFile = File(..
         f.write(await file.read())
 
     text_result = ""
-    try:
-        with open(temp_path, "rb") as f:
-            audio_bytes = f.read()
+    # Читаем безопасный ключ из панели управления Render
+    groq_key = os.getenv("GROQ_API_KEY")
+    
+    if groq_key:
+        try:
+            with open(temp_path, "rb") as f:
+                audio_bytes = f.read()
 
-        # Превращаем байты в виртуальный ogg-файл для распознавания в OpenAI Whisper модели
-        audio_packet = io.BytesIO(audio_bytes)
-        audio_packet.name = "voice.ogg"
+            audio_packet = io.BytesIO(audio_bytes)
+            audio_packet.name = "voice.ogg"
 
-        # Бесплатный и моментальный шлюз Groq Cloud OpenAI Whisper API
-        response = requests.post(
-            "https://groq.com",
-            headers={"Authorization": "Bearer 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"},
-            files={"file": (audio_packet.name, audio_packet, "audio/ogg")},
-            data={"model": "whisper-large-v3"},
-            timeout=25
-        )
-        if response.status_code == 200:
-            text_result = response.json().get("text", "").strip()
-    except Exception:
-        pass
+            response = requests.post(
+                "https://groq.com",
+                headers={"Authorization": f"Bearer {groq_key}"},
+                files={"file": (audio_packet.name, audio_packet, "audio/ogg")},
+                data={"model": "whisper-large-v3"},
+                timeout=25
+            )
+            if response.status_code == 200:
+                text_result = response.json().get("text", "").strip()
+        except Exception:
+            pass
 
     if not text_result:
         text_result = "Не удалось распознать речь ИИ"
