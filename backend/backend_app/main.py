@@ -136,13 +136,14 @@ async def create_voice_task(user_id: int = Form(...), file: UploadFile = File(..
     text_result = ""
     try:
         with open(temp_path, "rb") as f:
-            # Четко указываем имя "audio.ogg" и MIME-тип, чтобы Groq распознал кодек
+            # Отправка напрямую в шлюз OpenRouter OpenAI Whisper, который сам декодирует файлы
+            headers = {"Authorization": "Bearer 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"}
             files = {"file": ("audio.ogg", f, "audio/ogg")}
-            data = {"model": "whisper-large-v3"}
+            data = {"model": "openai/whisper-1"}
             
             response = requests.post(
-                "https://groq.com",
-                headers={"Authorization": "Bearer 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"},
+                "https://openrouter.ai",
+                headers=headers,
                 files=files,
                 data=data,
                 timeout=25
