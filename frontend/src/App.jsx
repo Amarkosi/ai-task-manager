@@ -10,7 +10,7 @@ function App() {
   const userId = urlParams.get('user_id');
 
 
-const API_URL = 'http://localhost:8000/tasks';
+const API_URL = 'https://ai-kanban-backend.onrender.com/tasks';
 
 
   const fetchTasks = async () => {
@@ -27,7 +27,7 @@ const API_URL = 'http://localhost:8000/tasks';
 
   const updateStatus = async (taskId, newStatus) => {
     try {
-      await axios.patch(`http://localhost:8000/tasks/${taskId}`, { status: newStatus });
+      await axios.patch(`https://ai-kanban-backend.onrender.com/tasks/${taskId}`, { status: newStatus });
       fetchTasks();
     } catch (error) {
       console.error("Ошибка при обновлении статуса:", error);
