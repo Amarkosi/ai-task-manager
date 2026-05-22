@@ -5,8 +5,8 @@ from pydantic import BaseModel
 from typing import List, Optional, Dict
 import json
 
-from .database import engine, Base, get_db
-from . import models
+from backend_app.database import engine, Base, get_db
+from backend_app import models
 
 Base.metadata.create_all(bind=engine)
 app = FastAPI(title="AI Task Manager API")
