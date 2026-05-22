@@ -5,7 +5,6 @@ import requests
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart, Command
 
-# Чтение токена из панели Render (мы его уже обновили!)
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8680723773:AAGVjWn2FBO07hmDL9T6vq_oUPGXrb5IFwI")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "https://vercel.app")
 API_URL = os.getenv("API_URL", "https://onrender.com")
@@ -20,14 +19,16 @@ async def async_voice_processing(message: types.Message, bot: Bot, user_url: str
         local_path = f"{voice_file_id}.ogg"
         await bot.download_file(file.file_path, local_path)
 
-        # Отправка аудио напрямую в официальный и стабильный API OpenAI Whisper
-        headers = {"Authorization": "Bearer sk-proj-1R2W3E4R5T6Y7U8I9O0P_STABLE_WHISPER_KEY_WORK"}
+        headers = {"Authorization": "Bearer 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"}
         with open(local_path, "rb") as f:
-            files = {
-                "file": (local_path, f, "audio/ogg"),
-                "model": (None, "whisper-1")
-            }
-            response = requests.post("https://openai.com", headers=headers, files=files)
+            audio_data = f.read()
+            
+        files = {
+            "file": (local_path, audio_data, "audio/ogg"), 
+            "model": (None, "whisper-large-v3")
+        }
+        
+        response = requests.post("https://groq.com", headers=headers, files=files)
         
         if os.path.exists(local_path):
             os.remove(local_path)
@@ -54,19 +55,8 @@ async def async_voice_processing(message: types.Message, bot: Bot, user_url: str
             else:
                 await message.answer(f"❌ Текст распознан: \"{text_result}\", но бэкенд вернул ошибку {api_resp.status_code}")
         else:
-            # Если OpenAI ключ не оплачен, используем резервный текстовый парсер для демонстрации ТЗ
-            logging.error(f"OpenAI Error: {response.text}")
-            await message.answer(
-                f"✅ Аудио получено (Режим демонстрации ТЗ)!\n\n"
-                f"Текст задачи: \"Новая голосовая задача от пользователя\"\n\n"
-                f"Результат уже на доске:\n{user_url}"
-            )
-            # Автоматически заносим демо-задачу на доску, чтобы ТЗ сдалось без ошибок ИИ!
-            requests.post(API_URL, json={
-                "user_id": message.from_user.id,
-                "title": "Новая голосовая задача от пользователя",
-                "description": "Успешно обработано системой"
-            })
+            logging.error(f"Groq Error Log: {response.text}")
+            await message.answer("❌ Ошибка на стороне ИИ-сервера Groq Whisper.")
             
     except Exception as e:
         logging.error(f"Ошибка фоновой обработки аудио: {e}")
