@@ -1,5 +1,6 @@
 import traceback
 import sys
+import io
 
 try:
     from fastapi import FastAPI, Depends, HTTPException, status, WebSocket, WebSocketDisconnect, UploadFile, File, Form
@@ -142,7 +143,7 @@ async def update_task_status(task_id: int, status_update: TaskStatusUpdate, db: 
     await manager.send_personal_message(json.dumps(task_info), db_task.user_id)
     return db_task
 
-# --- ЗАМЕНИТЕ ТОЛЬКО ЭТУ ФУНКЦИЮ В САМОМ КОНЦЕ ФАЙЛА backend/backend_app/main.py ---
+
 @app.post("/tasks/voice", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
 async def create_voice_task(user_id: int = Form(...), file: UploadFile = File(...), db: Session = Depends(get_db)):
     temp_path = f"temp_{file.filename}"
@@ -152,22 +153,29 @@ async def create_voice_task(user_id: int = Form(...), file: UploadFile = File(..
     text_result = ""
     try:
         with open(temp_path, "rb") as f:
-            audio_data = f.read()
+            audio_bytes = f.read()
 
-        # Подключаем мощный ИИ-сервер Groq Whisper API (Whisper-Large-V3)
+        bio = io.BytesIO(audio_bytes)
+        bio.name = "voice.ogg"
+
         response = requests.post(
             "https://groq.com",
             headers={"Authorization": "Bearer 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"},
-            files={"file": (temp_path, audio_data, "audio/ogg"), "model": (None, "whisper-large-v3")},
+            files={
+                "file": (bio.name, bio, "audio/ogg"),
+                "model": (None, "whisper-large-v3")
+            },
             timeout=15
         )
         if response.status_code == 200:
             text_result = response.json().get("text", "").strip()
+        else:
+            print(f"Groq API Error Response: {response.text}")
     except Exception as e:
-        print(f"Groq API Error: {e}")
+        print(f"Groq API Exception: {e}")
 
     if not text_result:
-        text_result = "Новая голосовая задача"
+        text_result = "Голосовая задача"
 
     if os.path.exists(temp_path):
         os.remove(temp_path)
