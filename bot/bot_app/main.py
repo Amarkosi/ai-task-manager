@@ -21,7 +21,7 @@ async def async_voice_processing(message: types.Message, bot: Bot, user_url: str
         await bot.download_file(file.file_path, local_path)
 
         # Отправка аудио напрямую в Groq Whisper API
-        headers = {"Authorization": "Bearer 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"}
+        headers = {"Authorization": "Bearer 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"}
         with open(local_path, "rb") as f:
             files = {"file": (local_path, f, "audio/ogg"), "model": (None, "whisper-large-v3")}
             response = requests.post("https://groq.com", headers=headers, files=files)
