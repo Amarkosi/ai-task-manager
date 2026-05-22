@@ -40,7 +40,6 @@ async def async_voice_processing(message: types.Message, bot: Bot, user_url: str
                 await status_msg.edit_text("❌ ИИ не смог расслышать речь в этом аудио. Попробуйте надиктовать громче и четче.")
                 return
 
-            # Записываем РЕАЛЬНЫЙ текст в базу данных Neon через FastAPI
             task_data = {
                 "user_id": message.from_user.id,
                 "title": text_result,
