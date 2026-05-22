@@ -5,11 +5,7 @@ from pydantic import BaseModel
 from typing import List, Optional, Dict
 import json
 import os
-import random
 import requests
-
-
-import speech_recognition as sr
 
 from backend_app.database import engine, Base, get_db
 from backend_app import models
@@ -24,7 +20,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 class ConnectionManager:
     def __init__(self):
@@ -51,19 +46,15 @@ class ConnectionManager:
                 except Exception:
                     pass
 
-
 manager = ConnectionManager()
-
 
 class TaskCreate(BaseModel):
     user_id: int
     title: str
     description: Optional[str] = None
 
-
 class TaskStatusUpdate(BaseModel):
     status: str
-
 
 class TaskResponse(BaseModel):
     id: int
@@ -75,7 +66,6 @@ class TaskResponse(BaseModel):
     class Config:
         from_attributes = True
 
-
 @app.websocket("/ws/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, user_id: int):
     await manager.connect(websocket, user_id)
@@ -84,7 +74,6 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int):
             await websocket.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(websocket, user_id)
-
 
 @app.post("/tasks", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
 async def create_task(task: TaskCreate, db: Session = Depends(get_db)):
@@ -112,13 +101,11 @@ async def create_task(task: TaskCreate, db: Session = Depends(get_db)):
     await manager.send_personal_message(json.dumps(task_info), task.user_id)
     return db_task
 
-
 @app.get("/tasks", response_model=List[TaskResponse])
 def get_user_tasks(user_id: Optional[int] = None, db: Session = Depends(get_db)):
     if user_id is not None:
         return db.query(models.Task).filter(models.Task.user_id == user_id).all()
     return db.query(models.Task).all()
-
 
 @app.patch("/tasks/{task_id}", response_model=TaskResponse)
 async def update_task_status(task_id: int, status_update: TaskStatusUpdate, db: Session = Depends(get_db)):
@@ -140,39 +127,35 @@ async def update_task_status(task_id: int, status_update: TaskStatusUpdate, db: 
     await manager.send_personal_message(json.dumps(task_info), db_task.user_id)
     return db_task
 
-
 @app.post("/tasks/voice", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
 async def create_voice_task(user_id: int = Form(...), file: UploadFile = File(...), db: Session = Depends(get_db)):
     temp_path = f"temp_{file.filename}"
+    if not temp_path.endswith(".ogg"):
+        temp_path += ".ogg"
+        
     with open(temp_path, "wb") as f:
         f.write(await file.read())
 
     text_result = ""
-    
     try:
+        headers = {"Authorization": "Bearer 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"}
         with open(temp_path, "rb") as f:
-            audio_bytes = f.read()
-
-        response = requests.post(
-            "https://huggingface.co",
-            headers={"Authorization": "Bearer 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"},
-            data=audio_bytes,
-            timeout=15
-        )
+            files = {"file": ("voice.ogg", f, "audio/ogg")}
+            data = {"model": "openai/whisper-1"}
+            response = requests.post(
+                "https://openrouter.ai",
+                headers=headers,
+                files=files,
+                data=data,
+                timeout=20
+            )
         if response.status_code == 200:
             text_result = response.json().get("text", "").strip()
     except Exception:
         pass
 
     if not text_result:
-        demo_pool = [
-            "Купить горячий кофе в офис",
-            "Позвонить заказчику и согласовать деплой",
-            "Проверить автообновление Канбан-доски",
-            "Завершить тестирование Telegram-бота",
-            "Потренироваться в спортзале вечером"
-        ]
-        text_result = random.choice(demo_pool)
+        text_result = "Новая голосовая задача"
 
     if os.path.exists(temp_path):
         os.remove(temp_path)
