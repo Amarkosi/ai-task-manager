@@ -6,7 +6,6 @@ from typing import List, Optional, Dict
 import json
 import os
 import requests
-import speech_recognition as sr
 
 from backend_app.database import engine, Base, get_db
 from backend_app import models
@@ -135,17 +134,23 @@ async def create_voice_task(user_id: int = Form(...), file: UploadFile = File(..
         f.write(await file.read())
 
     text_result = ""
-    
     try:
-        r = sr.Recognizer()
-        with sr.AudioFile(temp_path) as source:
-            audio_data = r.record(source)
-            text_result = r.recognize_google(audio_data, language="ru-RU").strip()
+        # Прямой HTTP запрос к Whisper API через рабочий токен Groq Cloud без использования сторонних прокси
+        with open(temp_path, "rb") as f:
+            response = requests.post(
+                "https://groq.com",
+                headers={"Authorization": "Bearer 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"},
+                files={"file": (temp_path, f, "audio/ogg")},
+                data={"model": "whisper-large-v3"},
+                timeout=25
+            )
+        if response.status_code == 200:
+            text_result = response.json().get("text", "").strip()
     except Exception:
         pass
 
     if not text_result:
-        text_result = "Голосовая задача принята"
+        text_result = "Ошибка распознавания аудио"
 
     if os.path.exists(temp_path):
         os.remove(temp_path)
