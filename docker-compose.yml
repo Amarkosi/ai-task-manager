@@ -1,0 +1,86 @@
+services:
+  # База данных PostgreSQL
+  postgres:
+    image: postgres:15-alpine
+    container_name: task_manager_db
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: task_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - task_network
+
+    # Наш веб-сайт фронтенда
+  frontend:
+    build: ./frontend
+    container_name: task_manager_frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    networks:
+      - task_network
+
+    # Брокер сообщений Redis
+  redis:
+    image: redis:7-alpine
+    container_name: task_manager_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - task_network
+
+  # API Бэкенда
+  backend:
+    build: ./backend
+    container_name: task_manager_backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/code
+    environment:
+      - DATABASE_URL=postgresql://user:password@postgres:5432/task_db
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - task_network
+
+  # Telegram-бот
+  bot:
+    build: ./bot
+    container_name: task_manager_bot
+    environment:
+      - BOT_TOKEN=8680723773:AAHeLosWb9sSgNrGxnQBFh68OZt_tNcitOc
+      - FRONTEND_URL=http://localhost:5173
+      - API_URL=http://backend:8000/tasks
+    depends_on:
+      - backend
+      - redis
+    networks:
+      - task_network
+
+  # Наш фоновый воркер Celery для ИИ-обработки
+  worker:
+    build: ./bot
+    container_name: task_manager_worker
+    command: celery -A bot_app.tasks.celery_app worker --loglevel=info
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+      - backend
+    networks:
+      - task_network
+
+volumes:
+  pgdata:
+
+networks:
+  task_network:
+    driver: bridge
