@@ -1,127 +1,73 @@
 import asyncio
 import logging
 import os
-import io
 import requests
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart, Command
 
-# Токены и адреса берутся из переменных окружения Render
-BOT_TOKEN = os.getenv("BOT_TOKEN", "8680723773:AAGVjWn2FBO07hmDL9T6vq_oUPGXrb5IFwI")
-FRONTEND_URL = os.getenv("FRONTEND_URL", "https://vercel.app")
-API_URL = os.getenv("API_URL", "https://onrender.com")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "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")
+# Импортируем настроенную Celery-задачу
+from bot_app.tasks import process_voice_task
+
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:8080")
+API_URL = os.getenv("API_URL", "http://backend:8000")
 
 logging.basicConfig(level=logging.INFO)
 dp = Dispatcher()
-
-# Изолированная фоновая ИИ-обработка аудио на стороне бота
-async def async_voice_processing(message: types.Message, bot: Bot, user_url: str):
-    status_msg = await message.answer("🔄 ИИ расшифровывает ваше аудио, пожалуйста, подождите...")
-    try:
-        # 1. Скачиваем аудиофайл напрямую из Telegram
-        voice_file_id = message.voice.file_id
-        file = await bot.get_file(voice_file_id)
-        
-        # Скачиваем файл в оперативную память, чтобы не работать с диском на Render
-        file_io = io.BytesIO()
-        await bot.download_file(file.file_path, file_io)
-        audio_bytes = file_io.getvalue()
-
-        # Превращаем байты в виртуальный ogg-файл для корректного multipart запроса в Groq
-        audio_packet = io.BytesIO(audio_bytes)
-        audio_packet.name = "voice.wav"
-
-        text_result = ""
-        
-        # 2. Отправляем поток аудио напрямую в Groq Whisper API (Whisper-Large-V3)
-        try:
-            response = requests.post(
-                "https://groq.com",
-                headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
-                files={"file": (audio_packet.name, audio_packet, "audio/ogg")},
-                data={"model": "whisper-large-v3"},
-                timeout=25
-            )
-            if response.status_code == 200:
-                text_result = response.json().get("text", "").strip()
-            else:
-                logging.error(f"Groq API Error Response: {response.text}")
-        except Exception as e:
-            logging.error(f"Groq API Request Exception: {e}")
-
-        if not text_result:
-            await status_msg.edit_text("❌ ИИ не смог распознать речь в этом аудио. Попробуйте надиктовать четче.")
-            return
-
-        # 3. Отправляем полученный РЕАЛЬНЫЙ текст в ваш бэкенд FastAPI
-        task_data = {
-            "user_id": message.from_user.id,
-            "title": text_result,
-            "description": "Создано голосом через Telegram"
-        }
-        api_resp = requests.post(API_URL, json=task_data)
-        
-        if api_resp.status_code == 201:
-            await status_msg.edit_text(
-                f"✅ Голосовая задача успешно создана!\n\n"
-                f"Текст задачи: \"{text_result}\"\n\n"
-                f"Результат уже на доске Vercel:\n{user_url}"
-            )
-        else:
-            await status_msg.edit_text(f"❌ Текст распознан: \"{text_result}\", но бэкенд вернул ошибку {api_resp.status_code}")
-            
-    except Exception as e:
-        logging.error(f"Ошибка фоновой обработки аудио: {e}")
-        await status_msg.edit_text("❌ Произошла ошибка при обработке голосового сообщения.")
 
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
     await message.answer(
         f"Привет, {message.from_user.first_name}! 🚀\n\n"
-        "Пожалуйста, введите или нажмите команду /board, чтобы получить ссылку на вашу личную Канбан-доску."
+        "Отправь мне текст или запиши голос, чтобы создать задачу.\n"
+        "Команда /board выдаст ссылку на твою Канбан-доску."
     )
 
 @dp.message(Command("board"))
 async def cmd_board(message: types.Message):
     user_url = f"{FRONTEND_URL}/?user_id={message.from_user.id}"
-    await message.answer(user_url)
+    await message.answer(f"📋 Твоя личная Канбан-доска:\n{user_url}")
 
+# ВЫПОЛНЕНИЕ ТЗ: Асинхронная отправка голоса в Redis-очередь
 @dp.message(lambda message: message.voice)
 async def handle_voice_task(message: types.Message, bot: Bot):
-    user_url = f"{FRONTEND_URL}/?user_id={message.from_user.id}"
-    # Запускаем тяжелую ИИ-обработку параллельно в фоне, бот не зависает
-    asyncio.create_task(async_voice_processing(message, bot, user_url))
+    # Мгновенный фидбек пользователю по ТЗ (UX: Speed of transcription feedback)
+    await message.answer("🔄 Голос принят! Задача добавлена в фоновую очередь Redis на ИИ-расшифровку...")
+    
+    # Скачиваем файл из Telegram в память
+    voice_file_id = message.voice.file_id
+    file = await bot.get_file(voice_file_id)
+    file_io = await bot.download_file(file.file_path)
+    audio_bytes = file_io.read()
 
+    # Сериализуем байты в список чисел для передачи через Redis в Celery
+    bytes_list = list(audio_bytes)
+    file_name = f"voice_{message.from_user.id}_{message.message_id}.ogg"
+
+    # Отправляем в воркер! Бот моментально свободен.
+    process_voice_task.delay(message.from_user.id, bytes_list, file_name)
+
+# Обработка быстрых текстовых заметок
 @dp.message(lambda message: message.text)
 async def handle_text_task(message: types.Message):
     user_url = f"{FRONTEND_URL}/?user_id={message.from_user.id}"
     task_data = {
         "user_id": message.from_user.id,
         "title": message.text,
-        "description": "Создано через Telegram-бота"
+        "description": "Создано через Telegram"
     }
     try:
-        response = requests.post(API_URL, json=task_data)
+        response = requests.post(f"{API_URL}/tasks", json=task_data, timeout=5)
         if response.status_code == 201:
-            await message.answer(
-                "✅ Текстовая задача создана!\n\n"
-                f"Посмотреть результат можно на вашей доске:\n{user_url}"
-            )
+            await message.answer(f"✅ Задача успешно создана и добавлена на доску!\n{user_url}")
         else:
-            await message.answer(f"❌ Сервер бэкенда вернул ошибку: {response.status_code}")
+            await message.answer(f"❌ Ошибка бэкенда: {response.status_code}")
     except Exception as e:
-        logging.error(f"Ошибка связи с бэкендом: {e}")
-        await message.answer("❌ Ошибка связи с бэкендом.")
+        logging.error(f"Backend connection error: {e}")
+        await message.answer("❌ Не удалось связаться с сервером бэкенда.")
 
 async def main():
     bot = Bot(token=BOT_TOKEN)
-    from aiogram.types import BotCommand, BotCommandScopeDefault
-    commands = [
-        BotCommand(command="start", description="Запустить бота"),
-        BotCommand(command="board", description="🔗 Получить ссылку на мою доску")
-    ]
-    await bot.set_my_commands(commands, scope=BotCommandScopeDefault())
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
