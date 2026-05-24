@@ -1,25 +1,19 @@
-from fastapi import FastAPI, Depends, HTTPException, status, WebSocket, WebSocketDisconnect, UploadFile, File, Form
+from fastapi import FastAPI, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List, Optional, Dict
 import json
-import os
-import requests
-import io
-
-# ИСПРАВЛЕНО: Правильный импорт для загрузки .env файлов
-from dotenv import load_dotenv
 
 from backend_app.database import engine, Base, get_db
 from backend_app import models
 
-# ИСПРАВЛЕНО: Вызываем функцию, которую импортировали выше
-load_dotenv() 
-
+# Автоматически создаем таблицы в PostgreSQL при старте контейнера
 Base.metadata.create_all(bind=engine)
+
 app = FastAPI(title="AI Task Manager API")
 
+# Разрешаем CORS, чтобы фронтенд мог общаться с бэкендом
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -28,6 +22,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Менеджер WebSocket-подключений для мгновенного обновления канбан-доски
 class ConnectionManager:
     def __init__(self):
         self.active_connections: Dict[int, List[WebSocket]] = {}
@@ -55,6 +50,7 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+# Схемы валидации данных Pydantic
 class TaskCreate(BaseModel):
     user_id: int
     title: str
@@ -73,6 +69,7 @@ class TaskResponse(BaseModel):
     class Config:
         from_attributes = True
 
+# Точка WebSocket подключения для фронтенда
 @app.websocket("/ws/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, user_id: int):
     await manager.connect(websocket, user_id)
@@ -82,19 +79,23 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int):
     except WebSocketDisconnect:
         manager.disconnect(websocket, user_id)
 
+# Единый эндпоинт создания задач (сюда отправляют данные и Бот, и Celery-Воркер)
 @app.post("/tasks", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
 async def create_task(task: TaskCreate, db: Session = Depends(get_db)):
+    # Проверяем наличие пользователя в БД, если его нет — создаем
     db_user = db.query(models.User).filter(models.User.telegram_id == task.user_id).first()
     if not db_user:
         new_user = models.User(telegram_id=task.user_id, username="tg_user", first_name="User")
         db.add(new_user)
         db.commit()
 
+    # Сохраняем задачу
     db_task = models.Task(user_id=task.user_id, title=task.title, description=task.description)
     db.add(db_task)
     db.commit()
     db.refresh(db_task)
 
+    # Мгновенно отправляем событие на фронтенд по WebSocket
     task_info = {
         "event": "task_created",
         "data": {
@@ -108,12 +109,14 @@ async def create_task(task: TaskCreate, db: Session = Depends(get_db)):
     await manager.send_personal_message(json.dumps(task_info), task.user_id)
     return db_task
 
+# Получение задач пользователя
 @app.get("/tasks", response_model=List[TaskResponse])
 def get_user_tasks(user_id: Optional[int] = None, db: Session = Depends(get_db)):
     if user_id is not None:
         return db.query(models.Task).filter(models.Task.user_id == user_id).all()
     return db.query(models.Task).all()
 
+# Изменение статуса задачи (Pending -> In Progress -> Completed)
 @app.patch("/tasks/{task_id}", response_model=TaskResponse)
 async def update_task_status(task_id: int, status_update: TaskStatusUpdate, db: Session = Depends(get_db)):
     db_task = db.query(models.Task).filter(models.Task.id == task_id).first()
@@ -124,6 +127,7 @@ async def update_task_status(task_id: int, status_update: TaskStatusUpdate, db: 
     db.commit()
     db.refresh(db_task)
 
+    # Уведомляем фронтенд об обновлении статуса карточки
     task_info = {
         "event": "task_updated",
         "data": {
@@ -132,68 +136,4 @@ async def update_task_status(task_id: int, status_update: TaskStatusUpdate, db: 
         }
     }
     await manager.send_personal_message(json.dumps(task_info), db_task.user_id)
-    return db_task
-
-@app.post("/tasks/voice", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
-async def create_voice_task(user_id: int = Form(...), file: UploadFile = File(...), db: Session = Depends(get_db)):
-    temp_path = f"temp_{file.filename}"
-    with open(temp_path, "wb") as f:
-        f.write(await file.read())
-
-    text_result = ""
-    groq_key = os.getenv("GROQ_API_KEY")
-    
-    if groq_key:
-        try:
-            with open(temp_path, "rb") as f:
-                audio_bytes = f.read()
-
-            audio_packet = io.BytesIO(audio_bytes)
-            audio_packet.name = "voice.ogg"
-
-            # ИСПРАВЛЕНО: Указан рабочий эндпоинт транскрипции Groq Cloud
-            response = requests.post(
-                "https://groq.com",
-                headers={"Authorization": f"Bearer {groq_key}"},
-                files={"file": (audio_packet.name, audio_packet, "audio/ogg")},
-                data={"model": "whisper-large-v3"},
-                timeout=25
-            )
-            if response.status_code == 200:
-                text_result = response.json().get("text", "").strip()
-            else:
-                print(f"Groq API Error: {response.status_code} - {response.text}")
-        except Exception as e:
-            print(f"Exception during speech recognition: {e}")
-    else:
-        print("Warning: GROQ_API_KEY environment variable is not set.")
-
-    if not text_result:
-        text_result = "Не удалось распознать речь ИИ"
-
-    if os.path.exists(temp_path):
-        os.remove(temp_path)
-
-    db_user = db.query(models.User).filter(models.User.telegram_id == user_id).first()
-    if not db_user:
-        new_user = models.User(telegram_id=user_id, username="tg_user", first_name="User")
-        db.add(new_user)
-        db.commit()
-
-    db_task = models.Task(user_id=user_id, title=text_result, description="Создано голосом через Telegram")
-    db.add(db_task)
-    db.commit()
-    db.refresh(db_task)
-
-    task_info = {
-        "event": "task_created",
-        "data": {
-            "id": db_task.id,
-            "user_id": db_task.user_id,
-            "title": db_task.title,
-            "description": db_task.description,
-            "status": db_task.status
-        }
-    }
-    await manager.send_personal_message(json.dumps(task_info), user_id)
     return db_task
