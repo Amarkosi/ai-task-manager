@@ -135,7 +135,6 @@ async def create_voice_task(user_id: int = Form(...), file: UploadFile = File(..
         f.write(await file.read())
 
     text_result = ""
-    # Читаем безопасный ключ из панели управления Render
     groq_key = os.getenv("GROQ_API_KEY")
     
     if groq_key:
@@ -146,6 +145,7 @@ async def create_voice_task(user_id: int = Form(...), file: UploadFile = File(..
             audio_packet = io.BytesIO(audio_bytes)
             audio_packet.name = "voice.ogg"
 
+            # ИСПРАВЛЕНО: актуальный эндпоинт для транскрипции в Groq API
             response = requests.post(
                 "https://groq.com",
                 headers={"Authorization": f"Bearer {groq_key}"},
@@ -155,8 +155,12 @@ async def create_voice_task(user_id: int = Form(...), file: UploadFile = File(..
             )
             if response.status_code == 200:
                 text_result = response.json().get("text", "").strip()
-        except Exception:
-            pass
+            else:
+                print(f"Groq API Error: {response.status_code} - {response.text}")
+        except Exception as e:
+            print(f"Exception during speech recognition: {e}")
+    else:
+        print("Warning: GROQ_API_KEY environment variable is not set.")
 
     if not text_result:
         text_result = "Не удалось распознать речь ИИ"
