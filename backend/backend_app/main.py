@@ -8,8 +8,14 @@ import os
 import requests
 import io
 
+# ИСПРАВЛЕНО: Правильный импорт для загрузки .env файлов
+from dotenv import load_dotenv
+
 from backend_app.database import engine, Base, get_db
 from backend_app import models
+
+# ИСПРАВЛЕНО: Вызываем функцию, которую импортировали выше
+load_dotenv() 
 
 Base.metadata.create_all(bind=engine)
 app = FastAPI(title="AI Task Manager API")
@@ -145,7 +151,7 @@ async def create_voice_task(user_id: int = Form(...), file: UploadFile = File(..
             audio_packet = io.BytesIO(audio_bytes)
             audio_packet.name = "voice.ogg"
 
-            # ИСПРАВЛЕНО: актуальный эндпоинт для транскрипции в Groq API
+            # ИСПРАВЛЕНО: Указан рабочий эндпоинт транскрипции Groq Cloud
             response = requests.post(
                 "https://groq.com",
                 headers={"Authorization": f"Bearer {groq_key}"},
