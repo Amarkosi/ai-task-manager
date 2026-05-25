@@ -1,6 +1,6 @@
-import base64
 import sys
 import os
+import base64
 
 # Корректируем пути Python до импортов, чтобы файлы в bot_app видели друг друга напрямую
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -38,19 +38,23 @@ async def cmd_board(message: types.Message):
 
 @dp.message(lambda message: message.voice)
 async def handle_voice_task(message: types.Message, bot: Bot):
-    await message.answer("🔄 Голос принят! Задача добавлена в фоновую очередь Redis на ИИ-расшифровку...")
+    # ИСПРАВЛЕНО: Бот теперь выдает живую персональную ссылку СРАЗУ при получении звука
+    user_url = f"{FRONTEND_URL}/?user_id={message.from_user.id}"
+    await message.answer(
+        "🔄 Голосовое сообщение принято и добавлено в фоновую очередь Redis на ИИ-расшифровку!\n\n"
+        f"📋 Результат появится на вашей доске через пару секунд без перезагрузки:\n{user_url}"
+    )
     
-    # 1. Скачиваем файл из Telegram в память
     voice_file_id = message.voice.file_id
     file = await bot.get_file(voice_file_id)
     file_io = await bot.download_file(file.file_path)
     audio_bytes = file_io.read()
 
-    # ИСПРАВЛЕНО: Вместо списка чисел переводим байты в безопасную текстовую строку Base64
+    # Сжимаем бинарный звук в легкую текстовую строку Base64 для стабильной работы Celery/Redis
     audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
     file_name = f"voice_{message.from_user.id}_{message.message_id}.ogg"
 
-    # Отправляем легкую текстовую строку в Redis!
+    # Отправляем в воркер
     process_voice_task.delay(message.from_user.id, audio_base64, file_name)
 
 @dp.message(lambda message: message.text)
@@ -63,11 +67,9 @@ async def handle_text_task(message: types.Message):
     }
     
     try:
-        # Очищаем базовый адрес от лишних слэшей на конце
         base_url = API_URL.rstrip('/')
         tasks_endpoint = f"{base_url}/tasks"
         
-        # Попытка №1: Отправляем классический POST на /tasks
         response = requests.post(tasks_endpoint, json=task_data, timeout=10)
         
         if response.status_code == 201:
@@ -75,7 +77,6 @@ async def handle_text_task(message: types.Message):
                 "✅ Текстовая задача создана!\n\n"
                 f"Посмотреть результат можно на вашей доске:\n{user_url}"
             )
-        # УМНЫЙ ОБХОД ОШИБКИ 405: Если хостинг выдает 405 из-за отсутствия слэша, делаем резервный запрос на /tasks/
         elif response.status_code == 405:
             backup_response = requests.post(f"{tasks_endpoint}/", json=task_data, timeout=10)
             if backup_response.status_code == 201:
