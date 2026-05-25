@@ -5,18 +5,17 @@ import './App.css';
 function App() {
   const [tasks, setTasks] = useState([]);
 
-  // Вытаскиваем user_id из URL параметров
+  // Вытаскиваем user_id из URL параметров (?user_id=12345)
   const urlParams = new URLSearchParams(window.location.search);
   const userId = urlParams.get('user_id');
 
-  // ИСПРАВЛЕНО: Используем правильные комментарии JS (// вместо #)
-  // Используем адрес из переменных окружения Vite (или локальный по умолчанию для Docker/разработки)
+  // Читаем адрес бэкенда из переменных окружения Vite (или берем локальный по умолчанию)
   const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
   
-  // Формируем безопасный WebSocket URL (меняем http на ws)
+  // Автоматически формируем WebSocket URL, заменяя http/https на ws/wss
   const WS_BASE = API_BASE.replace(/^http/, 'ws');
 
-  // 1. Функция первоначальной загрузки задач через HTTP
+  // 1. Функция первоначальной загрузки задач из базы данных через HTTP
   const fetchTasks = async () => {
     try {
       const config = userId ? { params: { user_id: userId } } : {};
@@ -27,21 +26,25 @@ function App() {
     }
   };
 
-  // 2. Функция обновления статуса задачи при клике на кнопки
+  // 2. ВОТ ЭТА ФУНКЦИЯ: Обновление статуса задачи на бэкенде при нажатии на кнопки
   const updateStatus = async (taskId, newStatus) => {
     try {
+      // Отправляем PATCH запрос. Бэкенд запишет статус и сам оповестит все вкладки через WebSocket
       await axios.patch(`${API_BASE}/tasks/${taskId}`, { status: newStatus });
     } catch (error) {
       console.error("Ошибка при обновлении статуса:", error);
     }
   };
 
-  // 3. ВЫПОЛНЕНИЕ ТЗ: Подключение к WebSocket для Real-time обновлений
+  // 3. ПОДКЛЮЧЕНИЕ WEBSOCKET: Real-time синхронизация доски без перезагрузок страницы
   useEffect(() => {
+    // Сразу скачиваем список задач при открытии страницы
     fetchTasks();
 
+    // Если ID пользователя в ссылке нет, сокеты не открываем
     if (!userId) return;
 
+    // Открываем живое WebSocket-соединение с сервером FastAPI
     const wsUrl = `${WS_BASE}/ws/${userId}`;
     const socket = new WebSocket(wsUrl);
 
@@ -49,13 +52,16 @@ function App() {
       try {
         const message = JSON.parse(event.data);
         
+        // Событие от Celery-воркера или бота: добавилась новая задача
         if (message.event === 'task_created') {
           setTasks((prevTasks) => {
+            // Защита от появления одинаковых карточек
             if (prevTasks.some(t => t.id === message.data.id)) return prevTasks;
             return [...prevTasks, message.data];
           });
         }
         
+        // Событие от клика по кнопке: у какой-то задачи изменился статус
         if (message.event === 'task_updated') {
           setTasks((prevTasks) =>
             prevTasks.map((t) =>
@@ -68,16 +74,19 @@ function App() {
       }
     };
 
+    // Если соединение оборвалось (например, моргнул интернет)
     socket.onclose = () => {
-      console.log("Сессия WebSocket закрыта. Повторное подключение через 5 секунд...");
+      console.log("Сессия WebSocket закрыта. Повторная синхронизация через 5 секунд...");
       setTimeout(() => fetchTasks(), 5000); 
     };
 
+    // Закрываем сокет, если пользователь ушел со страницы
     return () => {
       socket.close();
     };
   }, [userId]);
 
+  // Функция для отрисовки отдельной колонки Канбан-доски
   const renderColumn = (title, statusName, emoji) => {
     const filteredTasks = tasks.filter(t => t.status === statusName);
     return (
@@ -89,6 +98,7 @@ function App() {
               <h3>{task.title}</h3>
               <p>{task.description}</p>
               <div className="task-actions">
+                {/* Отрисовываем только те кнопки действий, которые логичны для текущей колонки */}
                 {statusName !== 'pending' && (
                   <button onClick={() => updateStatus(task.id, 'pending')}>📥 В ожидание</button>
                 )}
@@ -108,6 +118,7 @@ function App() {
 
   return (
     <div className="app-container">
+      {/* Шапка доски с информацией о сессии пользователя */}
       <header style={{ marginBottom: '30px', textAlign: 'center' }}>
         <h1 style={{
           color: '#2c3e50',
@@ -139,6 +150,7 @@ function App() {
         </p>
       </header>
 
+      {/* Сама интерактивная Канбан-сетка */}
       <div className="kanban-board">
         {renderColumn('В ожидании', 'pending', '📥')}
         {renderColumn('В процессе', 'in_progress', '⚡')}
