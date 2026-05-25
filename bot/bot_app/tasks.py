@@ -1,3 +1,4 @@
+import base64
 import os
 import requests
 import logging
@@ -30,16 +31,19 @@ API_URL = f"{base_api}/tasks"
 ai_client = Groq(api_key=GROQ_API_KEY)
 
 @celery_app.task(name="tasks.process_voice_task")
-def process_voice_task(user_id: int, file_bytes_list: list, file_name: str):
+def process_voice_task(user_id: int, audio_base64: str, file_name: str):
     logging.info(f" Celery-воркер забрал задачу {file_name} из очереди Redis")
     local_path = f"/tmp/{file_name}"
     
     try:
-        # 1. Восстанавливаем аудиофайл из переданного ботом списка байт
+        # ИСПРАВЛЕНО: Раскодируем строку Base64 обратно в бинарный аудиофайл
+        audio_bytes = base64.b64decode(audio_base64.encode('utf-8'))
+        
+        # Восстанавливаем аудиофайл на диск воркера
         with open(local_path, "wb") as f:
-            f.write(bytes(file_bytes_list))
+            f.write(audio_bytes)
 
-        # 2. Делаем асинхронный фоновый запрос к Whisper ИИ через официальный SDK
+        # Делаем асинхронный фоновый запрос к Whisper ИИ через официальный SDK
         with open(local_path, "rb") as audio_file:
             translation = ai_client.audio.transcriptions.create(
                 file=(file_name, audio_file.read(), "audio/ogg"),
@@ -52,7 +56,7 @@ def process_voice_task(user_id: int, file_bytes_list: list, file_name: str):
             logging.warning("Речь в аудиосообщении не распознана ИИ.")
             return "Речь не распознана"
 
-        # 3. Отправляем распознанную задачу в рабочий API Бэкенда
+        # Отправляем распознанную задачу в рабочий API Бэкенда
         task_data = {
             "user_id": user_id,
             "title": recognized_text[:50] + "..." if len(recognized_text) > 50 else recognized_text,
