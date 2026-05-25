@@ -9,10 +9,11 @@ function App() {
   const urlParams = new URLSearchParams(window.location.search);
   const userId = urlParams.get('user_id');
 
-  # Используем адрес из переменных окружения Vite (или локальный по умолчанию для Docker/разработки)
+  // ИСПРАВЛЕНО: Используем правильные комментарии JS (// вместо #)
+  // Используем адрес из переменных окружения Vite (или локальный по умолчанию для Docker/разработки)
   const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
   
-  # Формируем безопасный WebSocket URL (меняем http на ws)
+  // Формируем безопасный WebSocket URL (меняем http на ws)
   const WS_BASE = API_BASE.replace(/^http/, 'ws');
 
   // 1. Функция первоначальной загрузки задач через HTTP
@@ -30,8 +31,6 @@ function App() {
   const updateStatus = async (taskId, newStatus) => {
     try {
       await axios.patch(`${API_BASE}/tasks/${taskId}`, { status: newStatus });
-      // ВАЖНО:fetchTasks() больше вызывать не нужно! 
-      // Бэкенд сам пришлет обновление по WebSocket, и карточка сдвинется сама.
     } catch (error) {
       console.error("Ошибка при обновлении статуса:", error);
     }
@@ -39,13 +38,10 @@ function App() {
 
   // 3. ВЫПОЛНЕНИЕ ТЗ: Подключение к WebSocket для Real-time обновлений
   useEffect(() => {
-    // Сначала скачиваем текущие задачи из базы данных
     fetchTasks();
 
-    // Если на доску зашел анонимный пользователь без ID, сокеты не открываем
     if (!userId) return;
 
-    // Открываем постоянное живое соединение с бэкендом
     const wsUrl = `${WS_BASE}/ws/${userId}`;
     const socket = new WebSocket(wsUrl);
 
@@ -53,16 +49,13 @@ function App() {
       try {
         const message = JSON.parse(event.data);
         
-        // Ловим событие создания новой задачи ИИ-воркером или ботом
         if (message.event === 'task_created') {
           setTasks((prevTasks) => {
-            // Защита от дубликатов в интерфейсе
             if (prevTasks.some(t => t.id === message.data.id)) return prevTasks;
             return [...prevTasks, message.data];
           });
         }
         
-        // Ловим событие ручного перетаскивания (смены статуса)
         if (message.event === 'task_updated') {
           setTasks((prevTasks) =>
             prevTasks.map((t) =>
@@ -75,7 +68,6 @@ function App() {
       }
     };
 
-    // Автоматический перезапуск сокета при обрыве интернета
     socket.onclose = () => {
       console.log("Сессия WebSocket закрыта. Повторное подключение через 5 секунд...");
       setTimeout(() => fetchTasks(), 5000); 
