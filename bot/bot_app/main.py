@@ -1,18 +1,19 @@
 import sys
 import os
+
+# Корректируем пути Python до импортов, чтобы файлы в bot_app видели друг друга напрямую
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
 import asyncio
 import logging
 import requests
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart, Command
-
-# Импортируем настроенную Celery-задачу
-# ИСПРАВЛЕНО: Полный путь импорта для Celery-воркера
-from tasks import process_voice_task
-
 from dotenv import load_dotenv
+
+# Загружаем переменные и импортируем Celery-задачу
 load_dotenv()
+from tasks import process_voice_task
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:8080")
@@ -34,26 +35,21 @@ async def cmd_board(message: types.Message):
     user_url = f"{FRONTEND_URL}/?user_id={message.from_user.id}"
     await message.answer(f"📋 Твоя личная Канбан-доска:\n{user_url}")
 
-# ВЫПОЛНЕНИЕ ТЗ: Асинхронная отправка голоса в Redis-очередь
 @dp.message(lambda message: message.voice)
 async def handle_voice_task(message: types.Message, bot: Bot):
-    # Мгновенный фидбек пользователю по ТЗ (UX: Speed of transcription feedback)
     await message.answer("🔄 Голос принят! Задача добавлена в фоновую очередь Redis на ИИ-расшифровку...")
     
-    # Скачиваем файл из Telegram в память
     voice_file_id = message.voice.file_id
     file = await bot.get_file(voice_file_id)
     file_io = await bot.download_file(file.file_path)
     audio_bytes = file_io.read()
 
-    # Сериализуем байты в список чисел для передачи через Redis в Celery
     bytes_list = list(audio_bytes)
     file_name = f"voice_{message.from_user.id}_{message.message_id}.ogg"
 
-    # Отправляем в воркер! Бот моментально свободен.
+    # Асинхронно отправляем в Redis
     process_voice_task.delay(message.from_user.id, bytes_list, file_name)
 
-# Обработка быстрых текстовых заметок
 @dp.message(lambda message: message.text)
 async def handle_text_task(message: types.Message):
     user_url = f"{FRONTEND_URL}/?user_id={message.from_user.id}"
@@ -63,7 +59,7 @@ async def handle_text_task(message: types.Message):
         "description": "Создано через Telegram"
     }
     try:
-        response = requests.post(f"{API_URL}/tasks", json=task_data, timeout=5)
+        response = requests.post(f"{API_URL.rstrip('/')}/tasks", json=task_data, timeout=5)
         if response.status_code == 201:
             await message.answer(f"✅ Задача успешно создана и добавлена на доску!\n{user_url}")
         else:
@@ -73,6 +69,8 @@ async def handle_text_task(message: types.Message):
         await message.answer("❌ Не удалось связаться с сервером бэкенда.")
 
 async def main():
+    if not BOT_TOKEN:
+        raise ValueError("КРИТИЧЕСКАЯ ОШИБКА: BOT_TOKEN не задан!")
     bot = Bot(token=BOT_TOKEN)
     await dp.start_polling(bot)
 
