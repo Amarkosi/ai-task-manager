@@ -58,12 +58,33 @@ async def handle_text_task(message: types.Message):
         "title": message.text,
         "description": "Создано через Telegram"
     }
+    
     try:
-        response = requests.post(f"{API_URL.rstrip('/')}/tasks", json=task_data, timeout=5)
+        # Очищаем базовый адрес от лишних слэшей на конце
+        base_url = API_URL.rstrip('/')
+        tasks_endpoint = f"{base_url}/tasks"
+        
+        # Попытка №1: Отправляем классический POST на /tasks
+        response = requests.post(tasks_endpoint, json=task_data, timeout=10)
+        
         if response.status_code == 201:
-            await message.answer(f"✅ Задача успешно создана и добавлена на доску!\n{user_url}")
+            await message.answer(
+                "✅ Текстовая задача создана!\n\n"
+                f"Посмотреть результат можно на вашей доске:\n{user_url}"
+            )
+        # УМНЫЙ ОБХОД ОШИБКИ 405: Если хостинг выдает 405 из-за отсутствия слэша, делаем резервный запрос на /tasks/
+        elif response.status_code == 405:
+            backup_response = requests.post(f"{tasks_endpoint}/", json=task_data, timeout=10)
+            if backup_response.status_code == 201:
+                await message.answer(
+                    "✅ Текстовая задача создана!\n\n"
+                    f"Посмотреть результат можно на вашей доске:\n{user_url}"
+                )
+            else:
+                await message.answer(f"❌ Сервер вернул ошибку при повторном запросе: {backup_response.status_code}")
         else:
-            await message.answer(f"❌ Ошибка бэкенда: {response.status_code}")
+            await message.answer(f"❌ Сервер бэкенда вернул ошибку: {response.status_code}")
+            
     except Exception as e:
         logging.error(f"Backend connection error: {e}")
         await message.answer("❌ Не удалось связаться с сервером бэкенда.")
