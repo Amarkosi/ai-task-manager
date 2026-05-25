@@ -13,7 +13,9 @@ function App() {
   const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
   
   // Формируем безопасный WebSocket URL (меняем http/https на ws/wss)
-  const WS_BASE = API_BASE.replace(/^http/, 'ws');
+  const WS_BASE = API_BASE.startsWith('https') 
+  ? API_BASE.replace(/^https/, 'wss') 
+  : API_BASE.replace(/^http/, 'ws');
 
   // 1. Функция первоначальной загрузки задач через HTTP
   const fetchTasks = async () => {
