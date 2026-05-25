@@ -12,8 +12,7 @@ function App() {
   // Читаем адрес бэкенда из переменных окружения Vite
   const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
   
-  // ИСПРАВЛЕНО: Безопасное формирование адреса для сокетов
-  // На Render (https) превратит адрес в wss://, а локально (http) в ws://
+  // ИСПРАВЛЕНО: Универсальное правило http->ws и https->wss для защиты от сброса сессии WebSocket
   const WS_BASE = API_BASE.startsWith('https') 
     ? API_BASE.replace(/^https/, 'wss') 
     : API_BASE.replace(/^http/, 'ws');
