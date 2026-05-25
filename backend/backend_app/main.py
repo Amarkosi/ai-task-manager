@@ -23,7 +23,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ИСПРАВЛЕНО: Корневой эндпоинт для успешного прохождения Health Check на хостинге Render
 @app.get("/")
 def read_root():
     return {"status": "ok", "message": "AI Task Manager API is running successfully"}
@@ -121,7 +120,6 @@ async def update_task_status(task_id: int, status_update: TaskStatusUpdate, db: 
         raise HTTPException(status_code=404, detail="Task not found")
 
     saved_user_id = db_task.user_id
-
     db_task.status = status_update.status
     db.commit()
     db.refresh(db_task)
@@ -136,3 +134,23 @@ async def update_task_status(task_id: int, status_update: TaskStatusUpdate, db: 
     
     await manager.send_personal_message(json.dumps(task_info), saved_user_id)
     return db_task
+
+# ДОБАВЛЕНО: Новый эндпоинт для полного удаления задачи из базы данных
+@app.delete("/tasks/{task_id}", status_code=status.HTTP_200_OK)
+async def delete_task_endpoint(task_id: int, db: Session = Depends(get_db)):
+    db_task = db.query(models.Task).filter(models.Task.id == task_id).first()
+    if not db_task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    saved_user_id = db_task.user_id
+    db.delete(db_task)
+    db.commit()
+
+    task_info = {
+        "event": "task_deleted",
+        "data": {
+            "id": task_id
+        }
+    }
+    await manager.send_personal_message(json.dumps(task_info), saved_user_id)
+    return {"detail": "Task deleted successfully"}
