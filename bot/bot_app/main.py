@@ -1,3 +1,4 @@
+import base64
 import sys
 import os
 
@@ -39,16 +40,18 @@ async def cmd_board(message: types.Message):
 async def handle_voice_task(message: types.Message, bot: Bot):
     await message.answer("🔄 Голос принят! Задача добавлена в фоновую очередь Redis на ИИ-расшифровку...")
     
+    # 1. Скачиваем файл из Telegram в память
     voice_file_id = message.voice.file_id
     file = await bot.get_file(voice_file_id)
     file_io = await bot.download_file(file.file_path)
     audio_bytes = file_io.read()
 
-    bytes_list = list(audio_bytes)
+    # ИСПРАВЛЕНО: Вместо списка чисел переводим байты в безопасную текстовую строку Base64
+    audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
     file_name = f"voice_{message.from_user.id}_{message.message_id}.ogg"
 
-    # Асинхронно отправляем в Redis
-    process_voice_task.delay(message.from_user.id, bytes_list, file_name)
+    # Отправляем легкую текстовую строку в Redis!
+    process_voice_task.delay(message.from_user.id, audio_base64, file_name)
 
 @dp.message(lambda message: message.text)
 async def handle_text_task(message: types.Message):
