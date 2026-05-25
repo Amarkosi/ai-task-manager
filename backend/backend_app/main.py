@@ -90,6 +90,7 @@ async def create_task(task: TaskCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(db_task)
 
+    # ИСПРАВЛЕНО: Берем task.user_id напрямую, сокет больше не закроется из-за сбоя сессии БД
     task_info = {
         "event": "task_created",
         "data": {
@@ -115,6 +116,9 @@ async def update_task_status(task_id: int, status_update: TaskStatusUpdate, db: 
     if not db_task:
         raise HTTPException(status_code=404, detail="Task not found")
 
+    # ИСПРАВЛЕНО: Сохраняем user_id заранее до фиксации изменений в базе данных
+    saved_user_id = db_task.user_id
+
     db_task.status = status_update.status
     db.commit()
     db.refresh(db_task)
@@ -126,5 +130,7 @@ async def update_task_status(task_id: int, status_update: TaskStatusUpdate, db: 
             "status": db_task.status
         }
     }
-    await manager.send_personal_message(json.dumps(task_info), db_task.user_id)
+    
+    # ИСПРАВЛЕНО: Передаем изолированный ID, сокет работает стабильно и не падает
+    await manager.send_personal_message(json.dumps(task_info), saved_user_id)
     return db_task
