@@ -14,7 +14,8 @@ celery_app = Celery(
 )
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-API_URL = f"{os.getenv('API_URL', 'http://backend:8000')}/tasks"
+base_api = os.getenv('API_URL', 'http://backend:8000').rstrip('/')
+API_URL = f"{base_api}/tasks"
 
 ai_client = Groq(api_key=GROQ_API_KEY)
 
