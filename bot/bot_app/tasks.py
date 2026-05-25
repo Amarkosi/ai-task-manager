@@ -30,7 +30,8 @@ API_URL = f"{base_api}/tasks"
 # Инициализируем клиент ИИ с проверенным ключом
 ai_client = Groq(api_key=GROQ_API_KEY)
 
-@celery_app.task(name="tasks.process_voice_task")
+# ИСПРАВЛЕНО: Явно регистрируем точное имя задачи, которое шлет бот из подпапки bot_app
+@celery_app.task(name="bot_app.tasks.process_voice_task")
 def process_voice_task(user_id: int, audio_base64: str, file_name: str):
     logging.info(f" Celery-воркер забрал задачу {file_name} из очереди Redis")
     local_path = f"/tmp/{file_name}"
