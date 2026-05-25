@@ -7,7 +7,7 @@ from aiogram.filters import CommandStart, Command
 
 # Импортируем настроенную Celery-задачу
 # ИСПРАВЛЕНО: Полный путь импорта для Celery-воркера
-from bot_app.tasks import process_voice_task
+from .tasks import process_voice_task
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:8080")
