@@ -1,6 +1,6 @@
 import sys
 import os
-
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import asyncio
 import logging
 import requests
@@ -11,8 +11,6 @@ from aiogram.filters import CommandStart, Command
 # ИСПРАВЛЕНО: Полный путь импорта для Celery-воркера
 from tasks import process_voice_task
 
-
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:8080")
 API_URL = os.getenv("API_URL", "http://backend:8000")
