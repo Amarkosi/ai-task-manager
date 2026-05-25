@@ -9,15 +9,16 @@ function App() {
   const urlParams = new URLSearchParams(window.location.search);
   const userId = urlParams.get('user_id');
 
-  // Используем адрес из переменных окружения Vite (или локальный по умолчанию для Docker/разработки)
+  // Читаем адрес бэкенда из переменных окружения Vite
   const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
   
-  // Формируем безопасный WebSocket URL (меняем http/https на ws/wss)
+  // ИСПРАВЛЕНО: Безопасное формирование адреса для сокетов
+  // На Render (https) превратит адрес в wss://, а локально (http) в ws://
   const WS_BASE = API_BASE.startsWith('https') 
-  ? API_BASE.replace(/^https/, 'wss') 
-  : API_BASE.replace(/^http/, 'ws');
+    ? API_BASE.replace(/^https/, 'wss') 
+    : API_BASE.replace(/^http/, 'ws');
 
-  // 1. Функция первоначальной загрузки задач через HTTP
+  // 1. Функция первоначальной загрузки задач из базы через HTTP
   const fetchTasks = async () => {
     try {
       const config = userId ? { params: { user_id: userId } } : {};
@@ -28,29 +29,35 @@ function App() {
     }
   };
 
-  // 2. Функция обновления статуса задачи при клике на кнопки
+  // 2. Функция обновления статуса задачи на бэкенде при нажатии на кнопки
   const updateStatus = async (taskId, newStatus) => {
     try {
-      // ИСПРАВЛЕНО: Теперь запрос уходит на правильный динамический URL
+      // Отправляем PATCH-запрос. Бэкенд запишет статус в PostgreSQL и сам оповестит сокеты
       await axios.patch(`${API_BASE}/tasks/${taskId}`, { status: newStatus });
     } catch (error) {
       console.error("Ошибка при обновлении статуса:", error);
     }
   };
 
-  // 3. ВЫПОЛНЕНИЕ ТЗ: Подключение к WebSocket для Real-time обновлений
+  // 3. ПОДКЛЮЧЕНИЕ WEBSOCKET: Живая синхронизация доски в реальном времени
   useEffect(() => {
+    // Сразу скачиваем список задач при открытии страницы
     fetchTasks();
 
+    // Если ID пользователя в ссылке нет, сокеты не открываем
     if (!userId) return;
 
+    // Открываем живое WebSocket-соединение с сервером FastAPI
     const wsUrl = `${WS_BASE}/ws/${userId}`;
+    console.log("Подключение к WebSocket по адресу:", wsUrl);
     const socket = new WebSocket(wsUrl);
 
     socket.onmessage = (event) => {
       try {
         const message = JSON.parse(event.data);
+        console.log("Получено сокет-сообщение:", message);
         
+        // Событие от Celery-воркера или бота: добавилась новая задача
         if (message.event === 'task_created') {
           setTasks((prevTasks) => {
             if (prevTasks.some(t => t.id === message.data.id)) return prevTasks;
@@ -58,6 +65,7 @@ function App() {
           });
         }
         
+        // Событие от клика по кнопке: у какой-то задачи изменился статус
         if (message.event === 'task_updated') {
           setTasks((prevTasks) =>
             prevTasks.map((t) =>
@@ -71,7 +79,7 @@ function App() {
     };
 
     socket.onclose = () => {
-      console.log("Сессия WebSocket закрыта. Повторное подключение через 5 секунд...");
+      console.log("Сессия WebSocket закрыта. Повторная попытка через 5 секунд...");
       setTimeout(() => fetchTasks(), 5000); 
     };
 
@@ -80,6 +88,7 @@ function App() {
     };
   }, [userId]);
 
+  // Функция для отрисовки отдельной колонки Канбан-доски
   const renderColumn = (title, statusName, emoji) => {
     const filteredTasks = tasks.filter(t => t.status === statusName);
     return (
