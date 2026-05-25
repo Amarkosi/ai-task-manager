@@ -5,39 +5,85 @@ import './App.css';
 function App() {
   const [tasks, setTasks] = useState([]);
 
-
+  // Вытаскиваем user_id из URL параметров
   const urlParams = new URLSearchParams(window.location.search);
   const userId = urlParams.get('user_id');
 
+  # Используем адрес из переменных окружения Vite (или локальный по умолчанию для Docker/разработки)
+  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  
+  # Формируем безопасный WebSocket URL (меняем http на ws)
+  const WS_BASE = API_BASE.replace(/^http/, 'ws');
 
-const API_URL = 'https://ai-kanban-backend.onrender.com/tasks';
-
-
+  // 1. Функция первоначальной загрузки задач через HTTP
   const fetchTasks = async () => {
     try {
-      // Если ID есть — фильтруем, если нет — запрашиваем все задачи
       const config = userId ? { params: { user_id: userId } } : {};
-      const response = await axios.get(API_URL, config);
+      const response = await axios.get(`${API_BASE}/tasks`, config);
       setTasks(response.data);
     } catch (error) {
       console.error("Ошибка при получении задач:", error);
     }
   };
 
-
+  // 2. Функция обновления статуса задачи при клике на кнопки
   const updateStatus = async (taskId, newStatus) => {
     try {
-      await axios.patch(`https://ai-kanban-backend.onrender.com/tasks/${taskId}`, { status: newStatus });
-      fetchTasks();
+      await axios.patch(`${API_BASE}/tasks/${taskId}`, { status: newStatus });
+      // ВАЖНО:fetchTasks() больше вызывать не нужно! 
+      // Бэкенд сам пришлет обновление по WebSocket, и карточка сдвинется сама.
     } catch (error) {
       console.error("Ошибка при обновлении статуса:", error);
     }
   };
 
+  // 3. ВЫПОЛНЕНИЕ ТЗ: Подключение к WebSocket для Real-time обновлений
   useEffect(() => {
+    // Сначала скачиваем текущие задачи из базы данных
     fetchTasks();
-    const interval = setInterval(fetchTasks, 3000);
-    return () => clearInterval(interval);
+
+    // Если на доску зашел анонимный пользователь без ID, сокеты не открываем
+    if (!userId) return;
+
+    // Открываем постоянное живое соединение с бэкендом
+    const wsUrl = `${WS_BASE}/ws/${userId}`;
+    const socket = new WebSocket(wsUrl);
+
+    socket.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        
+        // Ловим событие создания новой задачи ИИ-воркером или ботом
+        if (message.event === 'task_created') {
+          setTasks((prevTasks) => {
+            // Защита от дубликатов в интерфейсе
+            if (prevTasks.some(t => t.id === message.data.id)) return prevTasks;
+            return [...prevTasks, message.data];
+          });
+        }
+        
+        // Ловим событие ручного перетаскивания (смены статуса)
+        if (message.event === 'task_updated') {
+          setTasks((prevTasks) =>
+            prevTasks.map((t) =>
+              t.id === message.data.id ? { ...t, status: message.data.status } : t
+            )
+          );
+        }
+      } catch (err) {
+        console.error("Ошибка обработки сокет-сообщения:", err);
+      }
+    };
+
+    // Автоматический перезапуск сокета при обрыве интернета
+    socket.onclose = () => {
+      console.log("Сессия WebSocket закрыта. Повторное подключение через 5 секунд...");
+      setTimeout(() => fetchTasks(), 5000); 
+    };
+
+    return () => {
+      socket.close();
+    };
   }, [userId]);
 
   const renderColumn = (title, statusName, emoji) => {
@@ -70,7 +116,6 @@ const API_URL = 'https://ai-kanban-backend.onrender.com/tasks';
 
   return (
     <div className="app-container">
-      {/*Заголовок*/}
       <header style={{ marginBottom: '30px', textAlign: 'center' }}>
         <h1 style={{
           color: '#2c3e50',
@@ -98,7 +143,7 @@ const API_URL = 'https://ai-kanban-backend.onrender.com/tasks';
           )}
         </h1>
         <p style={{ color: '#718096', margin: '0', fontSize: '0.95rem' }}>
-          {userId ? 'Вы видите свои персональные задачи' : 'Отображение всех задач системы'}
+          {userId ? 'Вы видите свои персональные задачи (Real-time сокеты включены)' : 'Отображение всех задач системы'}
         </p>
       </header>
 
