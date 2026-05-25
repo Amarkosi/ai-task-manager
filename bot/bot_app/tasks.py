@@ -8,11 +8,10 @@ from groq import Groq
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 
 celery_app = Celery(
-    "tasks", 
+    "bot_app.tasks",
     broker=REDIS_URL,
     backend=REDIS_URL
 )
-
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 base_api = os.getenv('API_URL', 'http://backend:8000').rstrip('/')
 API_URL = f"{base_api}/tasks"
