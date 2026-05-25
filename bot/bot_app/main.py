@@ -6,7 +6,7 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart, Command
 
 # Импортируем настроенную Celery-задачу
-from tasks import process_voice_task
+from bot_app.tasks import process_voice_task
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:8080")
