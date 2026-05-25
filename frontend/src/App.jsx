@@ -37,7 +37,7 @@ function App() {
     }
   };
 
-  // 3. ДОБАВЛЕНО: Функция удаления задачи из базы данных
+  // 3. Функция удаления задачи из базы данных
   const deleteTask = async (taskId) => {
     try {
       await axios.delete(`${API_BASE}/tasks/${taskId}`);
@@ -77,7 +77,6 @@ function App() {
           );
         }
 
-        // Ловим событие удаления от других вкладок (если удалили из другого места)
         if (message.event === 'task_deleted') {
           setTasks((prevTasks) => prevTasks.filter((t) => t.id !== message.data.id));
         }
@@ -106,20 +105,33 @@ function App() {
             <div key={task.id} className="task-card">
               <h3>{task.title}</h3>
               <p>{task.description}</p>
-              <div className="task-actions" style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '10px' }}>
-                {/* ИСПРАВЛЕНО: Цвет текста кнопок изменен на черный (color: '#000000') */}
+              
+              {/* ИСПРАВЛЕНО: Кнопки теперь выстроены в строгий вертикальный столбик друг под другом */}
+              <div className="task-actions" style={{ 
+                display: 'flex', 
+                flexDirection: 'column', 
+                gap: '8px', 
+                marginTop: '15px',
+                width: '100%'
+              }}>
                 {statusName !== 'pending' && (
-                  <button style={{ color: '#000000', fontWeight: '500' }} onClick={() => updateStatus(task.id, 'pending')}>📥 В ожидание</button>
+                  <button style={{ color: '#000000', fontWeight: '500', width: '100%', padding: '8px' }} onClick={() => updateStatus(task.id, 'pending')}>📥 В ожидание</button>
                 )}
                 {statusName !== 'in_progress' && (
-                  <button style={{ color: '#000000', fontWeight: '500' }} onClick={() => updateStatus(task.id, 'in_progress')}>⚡ В процесс</button>
+                  <button style={{ color: '#000000', fontWeight: '500', width: '100%', padding: '8px' }} onClick={() => updateStatus(task.id, 'in_progress')}>⚡ В процесс</button>
                 )}
                 {statusName !== 'completed' && (
-                  <button style={{ color: '#000000', fontWeight: '500' }} onClick={() => updateStatus(task.id, 'completed')}>✅ Завершить</button>
+                  <button style={{ color: '#000000', fontWeight: '500', width: '100%', padding: '8px' }} onClick={() => updateStatus(task.id, 'completed')}>✅ Завершить</button>
                 )}
-                {/* ДОБАВЛЕНО: Кнопка удаления карточки */}
                 <button 
-                  style={{ color: '#ffffff', backgroundColor: '#e53e3e', fontWeight: '500', marginLeft: 'auto' }} 
+                  style={{ 
+                    color: '#ffffff', 
+                    backgroundColor: '#e53e3e', 
+                    fontWeight: '500', 
+                    width: '100%',
+                    padding: '8px',
+                    marginTop: '4px'
+                  }} 
                   onClick={() => deleteTask(task.id)}
                 >
                   🗑️ Удалить
