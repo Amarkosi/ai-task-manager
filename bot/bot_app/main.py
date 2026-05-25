@@ -11,6 +11,9 @@ from aiogram.filters import CommandStart, Command
 # ИСПРАВЛЕНО: Полный путь импорта для Celery-воркера
 from tasks import process_voice_task
 
+from dotenv import load_dotenv
+load_dotenv()
+
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:8080")
 API_URL = os.getenv("API_URL", "http://backend:8000")
