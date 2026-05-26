@@ -25,6 +25,7 @@ app.add_middleware(
 
 @app.get("/")
 def read_root():
+    # Возвращаем статус 200 OK. Render зафиксирует этот запрос как трафик и сбросит 15-минутный таймер сна
     return {"status": "ok", "message": "AI Task Manager API is running successfully"}
     
 class ConnectionManager:
