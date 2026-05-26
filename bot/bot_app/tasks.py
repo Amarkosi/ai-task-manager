@@ -5,11 +5,11 @@ import logging
 from celery import Celery
 from groq import Groq
 
-# КРИТИЧЕСКИЙ ФИКС ДЛЯ ИИ: Принудительно импортируем и запускаем загрузку .env на Render
+# Принудительно импортируем и запускаем загрузку .env на Render
 from dotenv import load_dotenv
 load_dotenv()
 
-# Подключаем Redis в качестве брокера задач по ТЗ
+# Подключаем Redis в качестве брокера задач
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 
 # Фиксируем параметры SSL для безопасного облачного Redis (Upstash)
@@ -30,14 +30,14 @@ API_URL = f"{base_api}/tasks"
 # Инициализируем клиент ИИ с проверенным ключом
 ai_client = Groq(api_key=GROQ_API_KEY)
 
-# ИСПРАВЛЕНО: Явно регистрируем точное имя задачи, которое шлет бот из подпапки bot_app
+# Явно регистрируем точное имя задачи, которое шлет бот из подпапки bot_app
 @celery_app.task(name="bot_app.tasks.process_voice_task")
 def process_voice_task(user_id: int, audio_base64: str, file_name: str):
     logging.info(f" Celery-воркер забрал задачу {file_name} из очереди Redis")
     local_path = f"/tmp/{file_name}"
     
     try:
-        # ИСПРАВЛЕНО: Раскодируем строку Base64 обратно в бинарный аудиофайл
+        # Раскодируем строку Base64 обратно в бинарный аудиофайл
         audio_bytes = base64.b64decode(audio_base64.encode('utf-8'))
         
         # Восстанавливаем аудиофайл на диск воркера
