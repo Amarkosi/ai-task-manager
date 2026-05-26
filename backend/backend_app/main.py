@@ -77,8 +77,17 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int):
     await manager.connect(websocket, user_id)
     try:
         while True:
-            await websocket.receive_text()
+            # Используем asyncio.wait_for, чтобы сокет каждые 20 секунд слал пустой пинг
+            try:
+                # Ожидаем текст от фронтенда с тайм-аутом в 20 секунд
+                await asyncio.wait_for(websocket.receive_text(), timeout=20.0)
+            except asyncio.TimeoutError:
+                # Если за 20 секунд браузер ничего не прислал, бэкенд шлет пустой пинг-сигнал,
+                # удерживая прокси-сервер Render от закрытия туннеля
+                await websocket.send_text(json.dumps({"event": "ping"}))
     except WebSocketDisconnect:
+        manager.disconnect(websocket, user_id)
+    except Exception:
         manager.disconnect(websocket, user_id)
 
 @app.post("/tasks", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
