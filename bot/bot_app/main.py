@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 # Корректируем пути Python до импортов, чтобы файлы в bot_app видели друг друга напрямую
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-# Загружаем переменные и импортируем Celery-задачу
+# Загружаем переменные окружения и импортируем Celery-задачу
 load_dotenv()
 from tasks import process_voice_task
 
@@ -22,20 +22,20 @@ API_URL = os.getenv("API_URL", "http://backend:8000")
 logging.basicConfig(level=logging.INFO)
 dp = Dispatcher()
 
-# ДОБАВЛЕНО: Бесплатный авто-пинг бэкенда каждые 5 минут, чтобы сервер никогда не спал
-async def keep_backend_alive():
-    logging.info("🤖 Фоновая задача авто-пинга бэкенда запущена")
+# ВЫПОЛНЕНИЕ ТЗ И ВЕЧНЫЙ АПТАЙМ: Внутренний будильник, который никогда не спит
+async def keep_backend_alive_forever():
+    logging.info("🤖 Вечный фоновый pinger бэкенда успешно активирован!")
     while True:
         try:
+            # Очищаем адрес бэкенда от слэшей и стучимся на главную страницу
             base_url = API_URL.rstrip('/')
-            # Просто пингуем главную страницу нашего бэкенда методом GET
-            response = requests.get(f"{base_url}/", timeout=10)
-            logging.info(f"🤖 Авто-пинг бэкенда выполнен. Статус ответа: {response.status_code}")
+            response = requests.get(f"{base_url}/", timeout=15)
+            logging.info(f"🤖 Пинг бэкенда прошёл успешно. Сервер ответил статусом: {response.status_code}")
         except Exception as e:
-            logging.error(f"🤖 Ошибка авто-пинга бэкенда: {e}")
+            logging.error(f"🤖 Ошибка автоматического пинга бэкенда: {e}")
         
-        # Засыпаем ровно на 5 минут (300 секунд) перед следующим пингом
-        await asyncio.sleep(300)
+        # Спим ровно 10 минут (600 секунд) и повторяем. Render не успеет усыпить бэкенд (лимит 15 мин)
+        await asyncio.sleep(600)
 
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
@@ -63,11 +63,11 @@ async def handle_voice_task(message: types.Message, bot: Bot):
     file_io = await bot.download_file(file.file_path)
     audio_bytes = file_io.read()
 
-    # Сжимаем бинарный звук в легкую текстовую строку Base64 для стабильной работы Celery/Redis
+    # Переводим бинарный звук в строку Base64 для безопасной передачи через Celery/Redis
     audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
     file_name = f"voice_{message.from_user.id}_{message.message_id}.ogg"
 
-    # Отправляем в воркер
+    # Сбрасываем задачу в воркер Celery
     process_voice_task.delay(message.from_user.id, audio_base64, file_name)
 
 @dp.message(lambda message: message.text)
@@ -111,8 +111,8 @@ async def main():
         raise ValueError("КРИТИЧЕСКАЯ ОШИБКА: BOT_TOKEN не задан!")
     bot = Bot(token=BOT_TOKEN)
     
-    # ДОБАВЛЕНО: Запускаем бесконечный фоновый цикл будильника одновременно со стартом бота
-    asyncio.create_task(keep_backend_alive())
+    # ЗАПУСКАЕМ ВЕЧНЫЙ БУДИЛЬНИК: Встраиваем фоновую задачу удержания бэкенда в онлайне
+    asyncio.create_task(keep_backend_alive_forever())
     
     await dp.start_polling(bot)
 
