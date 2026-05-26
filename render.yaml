@@ -1,0 +1,47 @@
+services:
+  # 1. Бэкенд API (FastAPI)
+  - type: web
+    name: ai-kanban-backend
+    env: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: PYTHONPATH=. python -m uvicorn backend_app.main:app --host 0.0.0.0 --port 10000
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+
+  # 2. Telegram-бот + Celery воркер в одном бесплатном контейнере
+  - type: web
+    name: ai-task-bot
+    env: python
+    rootDir: bot
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m http.server 10000 & celery -A bot_app.tasks.celery_app worker --loglevel=info --purge --concurrency=1 & python bot_app/main.py
+    envVars:
+      - key: API_URL
+        value: https://ai-kanban-backend.onrender.com
+      - key: BOT_TOKEN
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: FRONTEND_URL
+        value: https://ai-task-board.onrender.com
+      - key: GROQ_API_KEY
+        sync: false
+      - key: REDIS_URL
+        sync: false
+
+  # 3. Канбан-доска (React + Vite)
+  - type: web
+    name: ai-task-board
+    env: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    publishDir: dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://ai-kanban-backend.onrender.com
