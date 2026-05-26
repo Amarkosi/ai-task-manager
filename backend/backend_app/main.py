@@ -72,7 +72,6 @@ class TaskResponse(BaseModel):
     class Config:
         from_attributes = True
 
-# ИСПРАВЛЕНО: Полностью удален цикл Ping-Pong таймаута (сохранено чистое чтение сокета по ТЗ)
 @app.websocket("/ws/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, user_id: int):
     await manager.connect(websocket, user_id)
