@@ -8,6 +8,7 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart, Command
 from dotenv import load_dotenv
 
+# Base64-кодирование звука
 # Корректируем пути Python до импортов, чтобы файлы в bot_app видели друг друга напрямую
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
@@ -16,26 +17,11 @@ load_dotenv()
 from tasks import process_voice_task
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:8080")
 API_URL = os.getenv("API_URL", "http://backend:8000")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:8080")
 
 logging.basicConfig(level=logging.INFO)
 dp = Dispatcher()
-
-# ВЫПОЛНЕНИЕ ТЗ И ВЕЧНЫЙ АПТАЙМ: Внутренний будильник, который никогда не спит
-async def keep_backend_alive_forever():
-    logging.info("🤖 Вечный фоновый pinger бэкенда успешно активирован!")
-    while True:
-        try:
-            # Очищаем адрес бэкенда от слэшей и стучимся на главную страницу
-            base_url = API_URL.rstrip('/')
-            response = requests.get(f"{base_url}/", timeout=15)
-            logging.info(f"🤖 Пинг бэкенда прошёл успешно. Сервер ответил статусом: {response.status_code}")
-        except Exception as e:
-            logging.error(f"🤖 Ошибка автоматического пинга бэкенда: {e}")
-        
-        # Спим ровно 10 минут (600 секунд) и повторяем. Render не успеет усыпить бэкенд (лимит 15 мин)
-        await asyncio.sleep(600)
 
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
@@ -72,6 +58,10 @@ async def handle_voice_task(message: types.Message, bot: Bot):
 
 @dp.message(lambda message: message.text)
 async def handle_text_task(message: types.Message):
+    if not API_URL:
+        await message.answer("❌ Ошибка: API_URL не задан в переменных окружения.")
+        return
+
     user_url = f"{FRONTEND_URL}/?user_id={message.from_user.id}"
     task_data = {
         "user_id": message.from_user.id,
@@ -110,10 +100,6 @@ async def main():
     if not BOT_TOKEN:
         raise ValueError("КРИТИЧЕСКАЯ ОШИБКА: BOT_TOKEN не задан!")
     bot = Bot(token=BOT_TOKEN)
-    
-    # ЗАПУСКАЕМ ВЕЧНЫЙ БУДИЛЬНИК: Встраиваем фоновую задачу удержания бэкенда в онлайне
-    asyncio.create_task(keep_backend_alive_forever())
-    
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
