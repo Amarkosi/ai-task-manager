@@ -33,7 +33,7 @@ function App() {
     try {
       await axios.patch(`${API_BASE}/tasks/${taskId}`, { status: newStatus });
     } catch (error) {
-      console.error("Ошибка при обновлении статуса:", error);
+      console.error("Ошибка при更新статуса:", error);
     }
   };
 
@@ -41,19 +41,29 @@ function App() {
   const deleteTask = async (taskId) => {
     try {
       await axios.delete(`${API_BASE}/tasks/${taskId}`);
-      // Локально убираем из списка, чтобы интерфейс обновился мгновенно
       setTasks((prevTasks) => prevTasks.filter((t) => t.id !== taskId));
     } catch (error) {
       console.error("Ошибка при удалении задачи:", error);
     }
   };
 
-  // 4. Подключение к WebSocket для Real-time обновлений
+  // 4. Подключение к WebSocket для Real-time обновлений и авто-будильник
   useEffect(() => {
     // Скачиваем текущие/старые задачи сразу при открытии доски
     fetchTasks();
 
-    if (!userId) return;
+    // ИСПРАВЛЕНО: Будильник фронтенда. Каждые 4 минуты (240000 мс) пингуем бэкенд из браузера,
+    // имитируя живой трафик пользователя, чтобы Render никогда не усыплял сервер.
+    const pinger = setInterval(async () => {
+      try {
+        await axios.get(`${API_BASE}/`);
+        console.log("🤖 Фронтенд успешно пинганул бэкенд для удержания в онлайне");
+      } catch (err) {
+        console.error("Ошибка авто-пинга бэкенда:", err);
+      }
+    }, 240000);
+
+    if (!userId) return () => clearInterval(pinger);
 
     const wsUrl = `${WS_BASE}/ws/${userId}`;
     const socket = new WebSocket(wsUrl);
@@ -91,6 +101,7 @@ function App() {
 
     return () => {
       socket.close();
+      clearInterval(pinger);
     };
   }, [userId]);
 
@@ -106,7 +117,6 @@ function App() {
               <h3>{task.title}</h3>
               <p>{task.description}</p>
               
-              {/* Кнопки выстроены в строгий вертикальный столбик друг под другом */}
               <div className="task-actions" style={{ 
                 display: 'flex', 
                 flexDirection: 'column', 
@@ -172,7 +182,6 @@ function App() {
             </span>
           )}
         </h1>
-        {/* ИСПРАВЛЕНО: Текст (Real-time сокеты включены) успешно удален из вывода */}
         <p style={{ color: '#718096', margin: '0', fontSize: '0.95rem' }}>
           {userId ? 'Вы видите свои персональные задачи' : 'Отображение всех задач системы'}
         </p>
