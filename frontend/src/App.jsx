@@ -33,7 +33,7 @@ function App() {
     try {
       await axios.patch(`${API_BASE}/tasks/${taskId}`, { status: newStatus });
     } catch (error) {
-      console.error("Ошибка при更新статуса:", error);
+      console.error("Ошибка при обновлении статуса:", error);
     }
   };
 
@@ -47,23 +47,12 @@ function App() {
     }
   };
 
-  // 4. Подключение к WebSocket для Real-time обновлений и авто-будильник
+  // 4. Подключение к WebSocket для Real-time обновлений (ИСПРАВЛЕНО: Будильник pinger удален)
   useEffect(() => {
     // Скачиваем текущие/старые задачи сразу при открытии доски
     fetchTasks();
 
-    // ИСПРАВЛЕНО: Будильник фронтенда. Каждые 4 минуты (240000 мс) пингуем бэкенд из браузера,
-    // имитируя живой трафик пользователя, чтобы Render никогда не усыплял сервер.
-    const pinger = setInterval(async () => {
-      try {
-        await axios.get(`${API_BASE}/`);
-        console.log("🤖 Фронтенд успешно пинганул бэкенд для удержания в онлайне");
-      } catch (err) {
-        console.error("Ошибка авто-пинга бэкенда:", err);
-      }
-    }, 240000);
-
-    if (!userId) return () => clearInterval(pinger);
+    if (!userId) return;
 
     const wsUrl = `${WS_BASE}/ws/${userId}`;
     const socket = new WebSocket(wsUrl);
@@ -101,7 +90,6 @@ function App() {
 
     return () => {
       socket.close();
-      clearInterval(pinger);
     };
   }, [userId]);
 
