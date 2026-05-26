@@ -24,10 +24,9 @@ app.add_middleware(
 )
 
 @app.get("/")
-@app.route("/", methods=["HEAD"])
 def read_root():
     return {"status": "ok", "message": "AI Task Manager API is running successfully"}
-
+    
 class ConnectionManager:
     def __init__(self):
         self.active_connections: Dict[int, List[WebSocket]] = {}
