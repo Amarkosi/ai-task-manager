@@ -25,7 +25,6 @@ app.add_middleware(
 
 @app.get("/")
 def read_root():
-    # Возвращаем статус 200 OK. Render зафиксирует этот запрос как трафик и сбросит 15-минутный таймер сна
     return {"status": "ok", "message": "AI Task Manager API is running successfully"}
     
 class ConnectionManager:
@@ -73,19 +72,13 @@ class TaskResponse(BaseModel):
     class Config:
         from_attributes = True
 
+# ИСПРАВЛЕНО: Полностью удален цикл Ping-Pong таймаута (сохранено чистое чтение сокета по ТЗ)
 @app.websocket("/ws/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, user_id: int):
     await manager.connect(websocket, user_id)
     try:
         while True:
-            # Используем asyncio.wait_for, чтобы сокет каждые 20 секунд слал пустой пинг
-            try:
-                # Ожидаем текст от фронтенда с тайм-аутом в 20 секунд
-                await asyncio.wait_for(websocket.receive_text(), timeout=20.0)
-            except asyncio.TimeoutError:
-                # Если за 20 секунд браузер ничего не прислал, бэкенд шлет пустой пинг-сигнал,
-                # удерживая прокси-сервер Render от закрытия туннеля
-                await websocket.send_text(json.dumps({"event": "ping"}))
+            await websocket.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(websocket, user_id)
     except Exception:
@@ -145,7 +138,6 @@ async def update_task_status(task_id: int, status_update: TaskStatusUpdate, db: 
     await manager.send_personal_message(json.dumps(task_info), saved_user_id)
     return db_task
 
-# ДОБАВЛЕНО: Новый эндпоинт для полного удаления задачи из базы данных
 @app.delete("/tasks/{task_id}", status_code=status.HTTP_200_OK)
 async def delete_task_endpoint(task_id: int, db: Session = Depends(get_db)):
     db_task = db.query(models.Task).filter(models.Task.id == task_id).first()
